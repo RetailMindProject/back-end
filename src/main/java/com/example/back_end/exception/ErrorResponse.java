@@ -1,4 +1,4 @@
-package com.example.back_end.common.exception;
+package com.example.back_end.exception;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

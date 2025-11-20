@@ -1,5 +1,5 @@
-package com.example.back_end.common.exception;
-
+package com.example.back_end.exception;
+import com.example.back_end.exception.CustomException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
