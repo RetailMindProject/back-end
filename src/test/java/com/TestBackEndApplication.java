@@ -1,4 +1,4 @@
-package com.example.back_end;
+package com;
 
 import org.springframework.boot.SpringApplication;
 
