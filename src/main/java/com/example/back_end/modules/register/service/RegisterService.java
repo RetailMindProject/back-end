@@ -1,6 +1,6 @@
 package com.example.back_end.modules.register.service;
 
-import com.example.back_end.common.exception.CustomException;
+import com.example.back_end.exception.CustomException;
 import com.example.back_end.modules.register.dto.RegisterRequestDTO;
 import com.example.back_end.modules.register.dto.RegisterResponseDTO;
 import com.example.back_end.modules.register.entity.User;
