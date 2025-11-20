@@ -1,22 +1,6 @@
-server.port: 8081
 spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/pos_system_db
-    username: postgres
-    password: ahmad-1234
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-#  spring:
-#    security:
-#      user:
-#        name: ahmad
-#        password: 1234
-#        roles: ADMIN
+  application:
+    name: back-end
+
+  profiles:
+    active: dev
