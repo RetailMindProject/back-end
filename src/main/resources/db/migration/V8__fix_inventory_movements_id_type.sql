@@ -1,0 +1,2 @@
+ALTER TABLE inventory_movements
+ALTER COLUMN id TYPE BIGINT;
