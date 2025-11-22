@@ -4,13 +4,19 @@ import com.example.back_end.exception.CustomException;
 import com.example.back_end.modules.register.dto.RegisterRequestDTO;
 import com.example.back_end.modules.register.dto.RegisterResponseDTO;
 import com.example.back_end.modules.register.entity.User;
+import com.example.back_end.modules.register.entity.User.UserRole;
 import com.example.back_end.modules.register.mapper.UserMapper;
 import com.example.back_end.modules.register.repository.UserRepository;
 import com.example.back_end.security.JwtService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Arrays;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +40,63 @@ public class RegisterService {
             throw new CustomException("Email already registered");
         }
 
+        // Get current authenticated user
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        // إذا كان التسجيل الذاتي (للـ CEO الأول فقط)
+        if (request.getIsSelfRegistration() != null && request.getIsSelfRegistration()) {
+            if (!request.getRole().equals(UserRole.CEO)) {
+                throw new CustomException("Self registration is only allowed for CEO role");
+            }
+            return createUser(request);
+        }
+
+        // إذا لم يكن هناك مستخدم مسجل دخول
+        if (authentication == null || !authentication.isAuthenticated() ||
+                authentication.getPrincipal().equals("anonymousUser")) {
+            throw new CustomException("You must be logged in to create a user account");
+        }
+
+        // الحصول على المستخدم الحالي
+        String currentUserEmail = authentication.getName();
+        User currentUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new CustomException("Current user not found"));
+
+        // التحقق من الصلاحيات
+        validateRolePermissions(currentUser.getRole(), request.getRole());
+
+        // Create the user
+        return createUser(request);
+    }
+
+    private void validateRolePermissions(UserRole currentUserRole, UserRole targetRole) {
+
+        // CEO can create: STORE_MANAGER, INVENTORY_MANAGER, CASHIER
+        if (currentUserRole.equals(UserRole.CEO)) {
+            List<UserRole> allowedRoles = Arrays.asList(
+                    UserRole.STORE_MANAGER,
+                    UserRole.INVENTORY_MANAGER,
+                    UserRole.CASHIER
+            );
+            if (!allowedRoles.contains(targetRole)) {
+                throw new CustomException("CEO can only create Store Manager, Inventory Manager, or Cashier accounts");
+            }
+            return;
+        }
+
+        // STORE_MANAGER can only create: CASHIER
+        if (currentUserRole.equals(UserRole.STORE_MANAGER)) {
+            if (!targetRole.equals(UserRole.CASHIER)) {
+                throw new CustomException("Store Manager can only create Cashier accounts");
+            }
+            return;
+        }
+
+        // INVENTORY_MANAGER and CASHIER cannot create any users
+        throw new CustomException("You don't have permission to create user accounts");
+    }
+
+    private RegisterResponseDTO createUser(RegisterRequestDTO request) {
         // Create new user
         User user = new User();
         user.setFirstName(request.getFirstName());
