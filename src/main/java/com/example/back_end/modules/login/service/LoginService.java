@@ -4,6 +4,7 @@ import com.example.back_end.modules.login.dto.LoginRequestDTO;
 import com.example.back_end.modules.login.dto.LoginResponseDTO;
 import com.example.back_end.modules.login.entity.uesr;
 import com.example.back_end.modules.login.reporsitory.repository;
+import com.example.back_end.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -16,6 +17,7 @@ public class LoginService {
 
     private final repository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
     public LoginResponseDTO login(LoginRequestDTO loginRequest) {
         try {
@@ -32,7 +34,7 @@ public class LoginService {
             // تحديد URL للتوجيه بناءً على الدور
             String redirectUrl = getRedirectUrlByRole(user.getRole());
 
-            // يمكنك هنا إنشاء JWT token إذا كنت تستخدم JWT
+            // إنشاء JWT token حقيقي
             String token = generateToken(user);
 
             log.info("Successful login for user: {} with role: {}", user.getEmail(), user.getRole());
@@ -69,8 +71,7 @@ public class LoginService {
     }
 
     private String generateToken(uesr user) {
-        // هنا يمكنك إضافة منطق إنشاء JWT token
-        // مؤقتاً سنرجع token بسيط
-        return "Bearer_token_for_" + user.getEmail();
+        return jwtService.generateToken(user.getEmail(), user.getRole());
     }
 }
+
