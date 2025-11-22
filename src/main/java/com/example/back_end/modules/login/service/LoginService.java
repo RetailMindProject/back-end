@@ -17,7 +17,7 @@ public class LoginService {
 
     private final repository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JwtService jwtService;
+    private final JwtService jwtService;  // ✅ أضف هذا
 
     public LoginResponseDTO login(LoginRequestDTO loginRequest) {
         try {
@@ -34,8 +34,8 @@ public class LoginService {
             // تحديد URL للتوجيه بناءً على الدور
             String redirectUrl = getRedirectUrlByRole(user.getRole());
 
-            // إنشاء JWT token حقيقي
-            String token = generateToken(user);
+            // ✅ إنشاء JWT token حقيقي
+            String token = jwtService.generateToken(user.getEmail(), user.getRole());
 
             log.info("Successful login for user: {} with role: {}", user.getEmail(), user.getRole());
 
@@ -45,7 +45,7 @@ public class LoginService {
                     .firstName(user.getFirstName())
                     .lastName(user.getLastName())
                     .role(user.getRole())
-                    .token(token)
+                    .token(token)  // ✅ JWT token حقيقي
                     .redirectUrl(redirectUrl)
                     .message("Login successful")
                     .success(true)
@@ -69,9 +69,4 @@ public class LoginService {
             default -> "/dashboard";
         };
     }
-
-    private String generateToken(uesr user) {
-        return jwtService.generateToken(user.getEmail(), user.getRole());
-    }
 }
-
