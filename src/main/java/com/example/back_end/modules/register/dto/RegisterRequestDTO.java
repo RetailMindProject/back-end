@@ -1,5 +1,4 @@
 package com.example.back_end.modules.register.dto;
-
 import com.example.back_end.modules.register.entity.User.UserRole;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
@@ -42,4 +41,7 @@ public class RegisterRequestDTO {
 
     @NotBlank(message = "Confirm password is required")
     private String confirmPassword;
+
+    // هذا الحقل اختياري - يُستخدم فقط عند التسجيل الأولي للـ CEO
+    private Boolean isSelfRegistration = false;
 }
