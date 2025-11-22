@@ -39,8 +39,9 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/login", "/api/auth/register/ceo").permitAll()
-                        .requestMatchers("/api/auth/register").authenticated()
+                        .requestMatchers("/api/auth/**").permitAll() // Register & Login
+                        .requestMatchers("/api/dashboard/store/**").hasAnyRole("STORE_MANAGER","CEO")
+                        .requestMatchers("/api/dashboard/inventory/**").hasAnyRole("INVENTORY_MANAGER","CEO")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
