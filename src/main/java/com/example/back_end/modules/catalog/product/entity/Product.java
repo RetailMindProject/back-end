@@ -1,4 +1,4 @@
-package com.example.backend.modules.catalog.product.entity;
+package com.example.back_end.modules.catalog.product.entity;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;

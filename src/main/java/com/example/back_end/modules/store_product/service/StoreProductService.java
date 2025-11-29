@@ -1,7 +1,7 @@
-package com.example.backend.modules.store_product.service;
+package com.example.back_end.modules.store_product.service;
 
-import com.example.backend.modules.store_product.dto.StoreProductResponseDTO;
-import com.example.backend.modules.store_product.dto.StoreTransferRequestDTO;
+import com.example.back_end.modules.store_product.dto.StoreProductResponseDTO;
+import com.example.back_end.modules.store_product.dto.StoreTransferRequestDTO;
 
 import java.util.List;
 

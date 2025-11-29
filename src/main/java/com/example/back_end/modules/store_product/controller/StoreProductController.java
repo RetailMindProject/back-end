@@ -1,8 +1,8 @@
-package com.example.backend.modules.store_product.controller;
+package com.example.back_end.modules.store_product.controller;
 
-import com.example.backend.modules.store_product.dto.StoreProductResponseDTO;
-import com.example.backend.modules.store_product.dto.StoreTransferRequestDTO;
-import com.example.backend.modules.store_product.service.StoreProductService;
+import com.example.back_end.modules.store_product.dto.StoreProductResponseDTO;
+import com.example.back_end.modules.store_product.dto.StoreTransferRequestDTO;
+import com.example.back_end.modules.store_product.service.StoreProductService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

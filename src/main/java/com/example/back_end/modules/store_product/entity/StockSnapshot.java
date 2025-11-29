@@ -1,4 +1,4 @@
-package com.example.backend.modules.store_product.entity;
+package com.example.back_end.modules.store_product.entity;
 
 import jakarta.persistence.*;
 import lombok.*;

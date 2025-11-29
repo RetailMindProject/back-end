@@ -1,11 +1,11 @@
-package com.example.backend.modules.catalog.product.service;
+package com.example.back_end.modules.catalog.product.service;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
-import com.example.backend.modules.catalog.product.dto.ProductCreateDTO;
-import com.example.backend.modules.catalog.product.dto.ProductResponseDTO;
-import com.example.backend.modules.catalog.product.dto.ProductUpdateDTO;
+import com.example.back_end.modules.catalog.product.dto.ProductCreateDTO;
+import com.example.back_end.modules.catalog.product.dto.ProductResponseDTO;
+import com.example.back_end.modules.catalog.product.dto.ProductUpdateDTO;
 
 import java.math.BigDecimal;
 

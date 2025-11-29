@@ -1,4 +1,4 @@
-package com.example.backend;
+package com.example.back_end;
 
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;

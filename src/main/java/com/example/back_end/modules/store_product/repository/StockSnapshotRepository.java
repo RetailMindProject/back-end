@@ -1,7 +1,7 @@
-package com.example.backend.modules.store_product.repository;
+package com.example.back_end.modules.store_product.repository;
 
-import com.example.backend.modules.store_product.entity.StockSnapshot;
-import com.example.backend.modules.store_product.mapper.StoreProductMapper.StockProjection;
+import com.example.back_end.modules.store_product.entity.StockSnapshot;
+import com.example.back_end.modules.store_product.mapper.StoreProductMapper.StockProjection;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 

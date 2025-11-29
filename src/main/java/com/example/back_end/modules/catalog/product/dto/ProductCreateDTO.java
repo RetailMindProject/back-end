@@ -1,4 +1,4 @@
-package com.example.backend.modules.catalog.product.dto;
+package com.example.back_end.modules.catalog.product.dto;
 
 import jakarta.validation.constraints.*;
 import lombok.*;

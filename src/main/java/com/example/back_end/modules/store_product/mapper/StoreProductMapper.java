@@ -1,8 +1,8 @@
-package com.example.backend.modules.store_product.mapper;
+package com.example.back_end.modules.store_product.mapper;
 
-import com.example.backend.modules.catalog.product.entity.Product;
-import com.example.backend.modules.store_product.dto.StoreProductResponseDTO;
-import com.example.backend.modules.store_product.entity.StockSnapshot;
+import com.example.back_end.modules.catalog.product.entity.Product;
+import com.example.back_end.modules.store_product.dto.StoreProductResponseDTO;
+import com.example.back_end.modules.store_product.entity.StockSnapshot;
 
 import java.math.BigDecimal;
 import java.time.Instant;

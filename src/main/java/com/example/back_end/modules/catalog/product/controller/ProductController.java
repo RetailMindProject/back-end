@@ -1,4 +1,4 @@
-package com.example.backend.modules.catalog.product.controller;
+package com.example.back_end.modules.catalog.product.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -6,8 +6,8 @@ import org.springframework.data.domain.*;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import com.example.backend.modules.catalog.product.dto.*;
-import com.example.backend.modules.catalog.product.service.ProductService;
+import com.example.back_end.modules.catalog.product.dto.*;
+import com.example.back_end.modules.catalog.product.service.ProductService;
 
 import java.math.BigDecimal;
 

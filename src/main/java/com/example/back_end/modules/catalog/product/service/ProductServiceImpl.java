@@ -1,4 +1,4 @@
-package com.example.backend.modules.catalog.product.service;
+package com.example.back_end.modules.catalog.product.service;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -7,10 +7,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.example.backend.modules.catalog.product.dto.*;
-import com.example.backend.modules.catalog.product.entity.Product;
-import com.example.backend.modules.catalog.product.mapper.ProductMapper;
-import com.example.backend.modules.catalog.product.repository.ProductRepository;
+import com.example.back_end.modules.catalog.product.dto.*;
+import com.example.back_end.modules.catalog.product.entity.Product;
+import com.example.back_end.modules.catalog.product.mapper.ProductMapper;
+import com.example.back_end.modules.catalog.product.repository.ProductRepository;
 
 import java.math.BigDecimal;
 

@@ -1,4 +1,4 @@
-package com.example.backend.modules.store_product.dto;
+package com.example.back_end.modules.store_product.dto;
 
 import lombok.*;
 
