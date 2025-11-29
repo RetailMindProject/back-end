@@ -1,4 +1,4 @@
-package com.example.back_end.modules.products.entity;
+package com.example.backend.modules.catalog.product.entity;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
@@ -10,8 +10,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 @Getter @Setter
+@Data
 @Builder
-@NoArgsConstructor @AllArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 @Entity
 @Table(name = "products",
         uniqueConstraints = @UniqueConstraint(name = "uk_products_sku", columnNames = "sku"),
@@ -45,7 +47,7 @@ public class Product {
     private BigDecimal defaultPrice;
 
     @PositiveOrZero
-    @Column(name = "tax_rate", precision = 5, scale = 2, nullable = false)
+    @Column(name = "tax_rate", precision = 5, scale = 2)
     private BigDecimal taxRate;
 
     @Builder.Default

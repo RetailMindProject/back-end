@@ -3,7 +3,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/pos_system_db
     username: postgres
-    password: ahmad-1234
+    password: mypw2311222789@
   jpa:
     hibernate:
       ddl-auto: validate

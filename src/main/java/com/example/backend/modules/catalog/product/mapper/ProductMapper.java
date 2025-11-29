@@ -1,9 +1,9 @@
-package com.example.back_end.modules.products.mapper;
+package com.example.backend.modules.catalog.product.mapper;
 
-import com.example.back_end.modules.products.DTO.ProductCreateDTO;
-import com.example.back_end.modules.products.DTO.ProductUpdateDTO;
-import com.example.back_end.modules.products.DTO.ProductResponseDTO;
-import com.example.back_end.modules.products.entity.Product;
+import com.example.backend.modules.catalog.product.dto.ProductCreateDTO;
+import com.example.backend.modules.catalog.product.dto.ProductResponseDTO;
+import com.example.backend.modules.catalog.product.dto.ProductUpdateDTO;
+import com.example.backend.modules.catalog.product.entity.Product;
 
 public final class ProductMapper {
 

@@ -1,12 +1,14 @@
-package com.example.back_end.modules.products.controller;
+package com.example.backend.modules.catalog.product.controller;
 
-import com.example.back_end.modules.products.DTO.*;
-import com.example.back_end.modules.products.service.ProductService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import com.example.backend.modules.catalog.product.dto.*;
+import com.example.backend.modules.catalog.product.service.ProductService;
+
 import java.math.BigDecimal;
 
 
@@ -17,6 +19,7 @@ import java.math.BigDecimal;
 public class ProductController {
 
     private final ProductService service;
+
 
     @PostMapping
     public ResponseEntity<ProductResponseDTO> create(@Valid @RequestBody ProductCreateDTO dto) {
@@ -36,8 +39,8 @@ public class ProductController {
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "createdAt,desc") String sort
+            @RequestParam(defaultValue = "3") int size,
+            @RequestParam(defaultValue = "created_at,desc") String sort
     ) {
         String[] sp = sort.split(",", 2);
         Sort.Direction dir = (sp.length > 1 && "asc".equalsIgnoreCase(sp[1])) ? Sort.Direction.ASC : Sort.Direction.DESC;
