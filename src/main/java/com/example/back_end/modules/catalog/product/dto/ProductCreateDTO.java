@@ -16,4 +16,5 @@ public class ProductCreateDTO {
     @Size(max = 20) private String unit;
     @PositiveOrZero private BigDecimal wholesalePrice;
     private Boolean isActive; // optional
+    private java.util.Set<Long> mediaIds; // IDs of existing media to associate with the product
 }
