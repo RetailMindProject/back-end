@@ -1,19 +1,21 @@
 package com.example.back_end.modules.sales.payment.entity;
-
 import com.example.back_end.modules.sales.order.entity.Order;
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "payments")
-@Getter
-@Setter
+@Table(name = "payments", indexes = {
+        @Index(name = "idx_payments_order_id", columnList = "order_id")
+})
+@Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class Payment {
 
     @Id
@@ -24,13 +26,19 @@ public class Payment {
     @JoinColumn(name = "order_id")
     private Order order;
 
-    @Column(name = "method", nullable = false, length = 20)
-    private String method; // CASH, CARD
+    @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
+    private PaymentMethod method;
 
-    @Column(name = "amount", nullable = false, precision = 12, scale = 2)
+    @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal amount;
 
-    @Column(name = "created_at")
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
-}
 
+    public enum PaymentMethod {
+        CASH,
+        CARD
+    }
+}
