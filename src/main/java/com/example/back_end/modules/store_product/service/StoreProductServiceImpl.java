@@ -4,10 +4,12 @@ import com.example.back_end.modules.catalog.product.entity.Product;
 import com.example.back_end.modules.catalog.product.repository.ProductRepository;
 import com.example.back_end.modules.store_product.dto.StoreProductResponseDTO;
 import com.example.back_end.modules.store_product.dto.StoreTransferRequestDTO;
-import com.example.back_end.modules.store_product.entity.InventoryMovement;
+import com.example.back_end.modules.stock.entity.InventoryMovement;
+import com.example.back_end.modules.stock.enums.InventoryLocationType;
+import com.example.back_end.modules.stock.enums.InventoryRefType;
 import com.example.back_end.modules.store_product.entity.StockSnapshot;
 import com.example.back_end.modules.store_product.mapper.StoreProductMapper;
-import com.example.back_end.modules.store_product.repository.InventoryMovementRepository;
+import com.example.back_end.modules.stock.repository.InventoryMovementRepository;
 import com.example.back_end.modules.store_product.repository.StockSnapshotRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -27,9 +29,6 @@ public class StoreProductServiceImpl implements StoreProductService {
     private final InventoryMovementRepository movementRepository;
     private final StockSnapshotRepository snapshotRepository;
 
-    private static final String LOCATION_WAREHOUSE = "WAREHOUSE";
-    private static final String LOCATION_STORE = "STORE";
-    private static final String REF_TRANSFER = "TRANSFER";
 
     @Override
     public StoreProductResponseDTO transferFromInventoryToStore(StoreTransferRequestDTO dto) {
@@ -55,21 +54,23 @@ public class StoreProductServiceImpl implements StoreProductService {
         // warehouse OUT
         InventoryMovement whMove = InventoryMovement.builder()
                 .product(product)
-                .locationType(LOCATION_WAREHOUSE)
-                .refType(REF_TRANSFER)
+                .locationType(InventoryLocationType.WAREHOUSE)
+                .refType(InventoryRefType.TRANSFER)
                 .qtyChange(qty.negate())
                 .unitCost(unitCost)
                 .note(dto.getNote())
+                .movedAt(Instant.now())
                 .build();
 
         // store IN
         InventoryMovement storeMove = InventoryMovement.builder()
                 .product(product)
-                .locationType(LOCATION_STORE)
-                .refType(REF_TRANSFER)
+                .locationType(InventoryLocationType.STORE)
+                .refType(InventoryRefType.TRANSFER)
                 .qtyChange(qty)
                 .unitCost(unitCost)
                 .note(dto.getNote())
+                .movedAt(Instant.now())
                 .build();
 
         movementRepository.save(whMove);
@@ -108,21 +109,23 @@ public class StoreProductServiceImpl implements StoreProductService {
         // store OUT
         InventoryMovement storeMove = InventoryMovement.builder()
                 .product(product)
-                .locationType(LOCATION_STORE)
-                .refType(REF_TRANSFER)
+                .locationType(InventoryLocationType.STORE)
+                .refType(InventoryRefType.TRANSFER)
                 .qtyChange(qty.negate())
                 .unitCost(unitCost)
                 .note(dto.getNote())
+                .movedAt(Instant.now())
                 .build();
 
         // warehouse IN
         InventoryMovement whMove = InventoryMovement.builder()
                 .product(product)
-                .locationType(LOCATION_WAREHOUSE)
-                .refType(REF_TRANSFER)
+                .locationType(InventoryLocationType.WAREHOUSE)
+                .refType(InventoryRefType.TRANSFER)
                 .qtyChange(qty)
                 .unitCost(unitCost)
                 .note(dto.getNote())
+                .movedAt(Instant.now())
                 .build();
 
         movementRepository.save(storeMove);
