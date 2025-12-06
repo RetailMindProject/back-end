@@ -46,5 +46,5 @@ public class ProductUpdateDTO {
     // Option 2: Granular control (add, remove, update)
     private java.util.Set<Long> mediaIdsToAdd;
     private java.util.Set<Long> mediaIdsToRemove;
-    private java.util.Set<com.example.back_end.modules.catalog.product.dto.ProductImageUpdateDTO> imagesToUpdate;
+//    private java.util.Set<com.example.back_end.modules.catalog.product.dto.ProductImageUpdateDTO> imagesToUpdate;
 }
