@@ -1,8 +1,10 @@
 package com.example.back_end.modules.cashier.controller;
 import com.example.back_end.modules.cashier.dto.CashierDetailsDTO;
+import com.example.back_end.modules.cashier.dto.CloseSessionRequest;
 import com.example.back_end.modules.cashier.dto.SessionCardDTO;
 import com.example.back_end.modules.cashier.dto.SessionFilterDTO;
 import com.example.back_end.modules.cashier.service.SessionService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -75,5 +77,23 @@ public class SessionController {
 
         log.info("Returning {} active sessions", sessions.size());
         return ResponseEntity.ok(sessions);
+    }
+
+    /**
+     * PUT /api/sessions/{sessionId}/close
+     * Close a cashier session by ID
+     * Updates the session status to CLOSED, sets closedAt = now, and optionally saves closingAmount
+     */
+    @PutMapping("/{sessionId}/close")
+    public ResponseEntity<SessionCardDTO> closeSession(
+            @PathVariable Long sessionId,
+            @Valid @RequestBody CloseSessionRequest request) {
+        log.info("PUT /api/sessions/{}/close - Closing session with closing amount: {}", 
+                sessionId, request.getClosingAmount());
+
+        SessionCardDTO closedSession = sessionService.closeSession(sessionId, request);
+
+        log.info("Session {} closed successfully", sessionId);
+        return ResponseEntity.ok(closedSession);
     }
 }

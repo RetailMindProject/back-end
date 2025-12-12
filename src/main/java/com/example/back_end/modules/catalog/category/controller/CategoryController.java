@@ -1,8 +1,10 @@
 package com.example.back_end.modules.catalog.category.controller;
 
+import com.example.back_end.modules.catalog.category.dto.CategoryDTO;
 import com.example.back_end.modules.catalog.category.entity.Category;
 import com.example.back_end.modules.catalog.category.repository.CategoryRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.example.back_end.modules.catalog.category.service.CategoryService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,21 +16,17 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/categories")
 @CrossOrigin(origins = "*")
+@RequiredArgsConstructor
 public class CategoryController {
 
-    @Autowired
-    private CategoryRepository categoryRepository;
+    private final CategoryRepository categoryRepository;
+    private final CategoryService categoryService;
 
-    /**
-     * Get all categories
-     * GET /api/categories
-     */
     @GetMapping
     public ResponseEntity<Map<String, Object>> getAllCategories() {
         try {
             List<Category> categories = categoryRepository.findAll();
 
-            // Map to simple DTO for dropdown
             List<Map<String, Object>> categoryList = categories.stream()
                     .map(category -> {
                         Map<String, Object> cat = new HashMap<>();
@@ -53,10 +51,6 @@ public class CategoryController {
         }
     }
 
-    /**
-     * Get category by ID
-     * GET /api/categories/{id}
-     */
     @GetMapping("/{id}")
     public ResponseEntity<Map<String, Object>> getCategoryById(@PathVariable Long id) {
         try {
@@ -85,5 +79,35 @@ public class CategoryController {
             response.put("message", "Error fetching category: " + e.getMessage());
             return ResponseEntity.status(500).body(response);
         }
+    }
+
+    @GetMapping("/hierarchy")
+    public ResponseEntity<List<CategoryDTO.CategoryResponse>> getCategoriesHierarchy() {
+        List<CategoryDTO.CategoryResponse> categories = categoryService.getAllCategoriesHierarchy();
+        return ResponseEntity.ok(categories);
+    }
+
+    @GetMapping("/parents")
+    public ResponseEntity<List<CategoryDTO.CategorySimple>> getParentCategories() {
+        List<CategoryDTO.CategorySimple> categories = categoryService.getAllParentCategories();
+        return ResponseEntity.ok(categories);
+    }
+
+    @GetMapping("/{parentId}/sub-categories")
+    public ResponseEntity<List<CategoryDTO.SubCategoryResponse>> getSubCategories(@PathVariable Long parentId) {
+        List<CategoryDTO.SubCategoryResponse> subCategories = categoryService.getSubCategories(parentId);
+        return ResponseEntity.ok(subCategories);
+    }
+
+    @GetMapping("/{id}/details")
+    public ResponseEntity<CategoryDTO.CategoryResponse> getCategoryDetails(@PathVariable Long id) {
+        CategoryDTO.CategoryResponse category = categoryService.getCategoryById(id);
+        return ResponseEntity.ok(category);
+    }
+
+    @GetMapping("/all")
+    public ResponseEntity<List<CategoryDTO.CategorySimple>> getAllCategoriesFlat() {
+        List<CategoryDTO.CategorySimple> categories = categoryService.getAllCategories();
+        return ResponseEntity.ok(categories);
     }
 }

@@ -9,8 +9,42 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
+
 
 public interface OrderRepository extends JpaRepository<Order, Long> {
+
+    Optional<Order> findByOrderNumber(String orderNumber);
+
+    /**
+     * Find all orders by session (for order history)
+     */
+    @Query("SELECT o FROM Order o WHERE o.session.id = :sessionId ORDER BY o.createdAt DESC")
+    List<Order> findBySessionId(@Param("sessionId") Long sessionId);
+
+    /**
+     * Find orders by status and session
+     */
+    @Query("SELECT o FROM Order o WHERE o.session.id = :sessionId AND o.status = :status ORDER BY o.createdAt DESC")
+    List<Order> findBySessionIdAndStatus(@Param("sessionId") Long sessionId, @Param("status") Order.OrderStatus status);
+
+    /**
+     * Find draft/held orders by session (for retrieving saved orders)
+     */
+    @Query("SELECT o FROM Order o WHERE o.session.id = :sessionId AND o.status IN ('DRAFT', 'HELD') ORDER BY o.createdAt DESC")
+    List<Order> findDraftOrdersBySession(@Param("sessionId") Long sessionId);
+
+    /**
+     * Count orders in session
+     */
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.session.id = :sessionId AND o.status = 'PAID'")
+    Long countPaidOrdersBySession(@Param("sessionId") Long sessionId);
+
+    /**
+     * Sum total sales in session
+     */
+    @Query("SELECT COALESCE(SUM(o.grandTotal), 0) FROM Order o WHERE o.session.id = :sessionId AND o.status = 'PAID'")
+    BigDecimal sumSalesBySession(@Param("sessionId") Long sessionId);
 
     // Total sales amount (grand_total) for PAID orders in period
     @Query(value = """
