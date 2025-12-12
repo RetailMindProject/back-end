@@ -1,9 +1,12 @@
 package com.example.back_end.modules.catalog.category.entity;
+
 import com.example.back_end.modules.catalog.product.entity.Product;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Entity
@@ -17,7 +20,7 @@ public class Category {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id; // جدولك integer، واستخدام Long في الجافا مقبول
+    private Long id;
 
     @Column(name = "name", nullable = false, length = 80, unique = true)
     private String name;
@@ -27,8 +30,9 @@ public class Category {
     private Category parent;
 
     @OneToMany(mappedBy = "parent")
+    @OrderBy("name ASC")  // 🆕 ترتيب تلقائي
     @Builder.Default
-    private Set<Category> children = new HashSet<>();
+    private List<Category> children = new ArrayList<>();  // 🔥 غير من Set لـ List
 
     @ManyToMany(mappedBy = "categories")
     @Builder.Default

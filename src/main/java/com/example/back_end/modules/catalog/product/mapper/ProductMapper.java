@@ -1,9 +1,13 @@
 package com.example.back_end.modules.catalog.product.mapper;
 
+import com.example.back_end.modules.catalog.category.dto.CategorySimpleDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductCreateDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductResponseDTO;
+import com.example.back_end.modules.catalog.product.dto.ProductSimpleDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductUpdateDTO;
 import com.example.back_end.modules.catalog.product.entity.Product;
+
+import java.util.List;
 
 public final class ProductMapper {
 
@@ -55,6 +59,44 @@ public final class ProductMapper {
                 .isActive(entity.getIsActive())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
+                .build();
+    }
+
+    /**
+     * Convert to ProductResponseDTO with categories
+     */
+    public static ProductResponseDTO toResponse(Product entity, List<CategorySimpleDTO> categories) {
+        if (entity == null) return null;
+        return ProductResponseDTO.builder()
+                .id(entity.getId())
+                .sku(entity.getSku())
+                .name(entity.getName())
+                .brand(entity.getBrand())
+                .description(entity.getDescription())
+                .defaultCost(entity.getDefaultCost())
+                .defaultPrice(entity.getDefaultPrice())
+                .taxRate(entity.getTaxRate())
+                .unit(entity.getUnit())
+                .wholesalePrice(entity.getWholesalePrice())
+                .isActive(entity.getIsActive())
+                .createdAt(entity.getCreatedAt())
+                .updatedAt(entity.getUpdatedAt())
+                .categories(categories)
+                .build();
+    }
+
+    /**
+     * Convert to ProductSimpleDTO (lightweight for POS cart)
+     */
+    public static ProductSimpleDTO toSimpleDTO(Product entity) {
+        if (entity == null) return null;
+        return ProductSimpleDTO.builder()
+                .id(entity.getId())
+                .sku(entity.getSku())
+                .name(entity.getName())
+                .defaultPrice(entity.getDefaultPrice())
+                .taxRate(entity.getTaxRate())
+                .unit(entity.getUnit())
                 .build();
     }
 }

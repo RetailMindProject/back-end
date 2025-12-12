@@ -1,6 +1,7 @@
-package com.example.back_end.modules.cashier.repository;
-import org.springframework.data.jpa.repository.JpaRepository;
+package com.example.back_end.modules.sales.payment.repository;
+
 import com.example.back_end.modules.sales.payment.entity.Payment;
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -10,6 +11,32 @@ import java.util.List;
 
 @Repository
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
+
+    // ========================================
+    // 🛒 POS Operations (من sales module)
+    // ========================================
+
+    /**
+     * Find all payments for an order
+     */
+    @Query("SELECT p FROM Payment p WHERE p.order.id = :orderId ORDER BY p.createdAt")
+    List<Payment> findByOrderId(@Param("orderId") Long orderId);
+
+    /**
+     * Find payments by session
+     */
+    @Query("SELECT p FROM Payment p WHERE p.order.session.id = :sessionId ORDER BY p.createdAt")
+    List<Payment> findBySessionId(@Param("sessionId") Long sessionId);
+
+    /**
+     * Sum payments by method for session
+     */
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.order.session.id = :sessionId AND p.method = :method")
+    BigDecimal sumBySessionAndMethod(@Param("sessionId") Long sessionId, @Param("method") Payment.PaymentMethod method);
+
+    // ========================================
+    // 💰 Cashier Operations (من cashier module)
+    // ========================================
 
     /**
      * Calculate total CASH payments for a session
@@ -30,8 +57,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     BigDecimal calculateCardInBySessionId(@Param("sessionId") Long sessionId);
 
     /**
-     * Find all payments for a session
+     * Find all payments for a session (alias for findBySessionId)
      */
     @Query("SELECT p FROM Payment p WHERE p.order.session.id = :sessionId")
     List<Payment> findPaymentsBySessionId(@Param("sessionId") Long sessionId);
+
 }

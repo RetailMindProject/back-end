@@ -1,5 +1,5 @@
-package com.example.back_end.modules.sales.session.entity;
-import com.example.back_end.modules.cashier.entity.Terminal;
+package com.example.back_end.modules.cashier.entity;
+import com.example.back_end.modules.terminal.entity.Terminal;
 import com.example.back_end.modules.register.entity.User;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

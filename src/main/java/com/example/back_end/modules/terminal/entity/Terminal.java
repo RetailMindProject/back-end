@@ -1,4 +1,4 @@
-package com.example.back_end.modules.cashier.entity;
+package com.example.back_end.modules.terminal.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

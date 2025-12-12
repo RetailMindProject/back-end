@@ -1,8 +1,10 @@
 package com.example.back_end.modules.catalog.product.dto;
+import com.example.back_end.modules.catalog.category.dto.CategorySimpleDTO; 
 
 import lombok.*;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor
@@ -21,4 +23,8 @@ public class ProductResponseDTO {
     private Boolean isActive;
     private Instant createdAt;
     private Instant updatedAt;
+    
+    private List<CategorySimpleDTO> categories;
+
+
 }

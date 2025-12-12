@@ -2,7 +2,7 @@ package com.example.back_end.modules.cashier.mapper;
 import com.example.back_end.modules.cashier.dto.CashierDetailsDTO;
 import com.example.back_end.modules.cashier.dto.SessionCardDTO;
 import com.example.back_end.modules.register.entity.User;
-import com.example.back_end.modules.sales.session.entity.Session;
+import com.example.back_end.modules.cashier.entity.Session;
 import com.example.back_end.modules.sales.order.entity.Order;
 import org.springframework.stereotype.Component;
 
