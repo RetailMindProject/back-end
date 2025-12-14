@@ -39,4 +39,8 @@ public class ProductUpdateDTO {
     private BigDecimal wholesalePrice;
 
     private Boolean isActive;
+
+    private Long parentCategoryId;
+    
+    private Long subCategoryId; // optional
 }

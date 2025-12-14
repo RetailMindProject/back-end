@@ -27,6 +27,20 @@ public final class StoreProductMapper {
                 .build();
     }
 
+    // For transfer operations - without price information
+    public static StoreProductResponseDTO fromSnapshotForTransfer(Product product, StockSnapshot snapshot) {
+        if (product == null || snapshot == null) return null;
+
+        return StoreProductResponseDTO.builder()
+                .productId(product.getId())
+                .sku(product.getSku())
+                .name(product.getName())
+                .storeQty(nvl(snapshot.getStoreQty()))
+                .warehouseQty(nvl(snapshot.getWarehouseQty()))
+                .lastUpdatedAt(snapshot.getLastUpdatedAt())
+                .build();
+    }
+
     public static StoreProductResponseDTO fromProjection(StockProjection p) {
         if (p == null) return null;
 

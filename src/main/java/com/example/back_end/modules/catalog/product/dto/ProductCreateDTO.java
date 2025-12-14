@@ -16,4 +16,9 @@ public class ProductCreateDTO {
     @Size(max = 20) private String unit;
     @PositiveOrZero private BigDecimal wholesalePrice;
     private Boolean isActive; // optional
+    
+    @NotNull(message = "Parent category is required")
+    private Long parentCategoryId;
+    
+    private Long subCategoryId; // optional
 }

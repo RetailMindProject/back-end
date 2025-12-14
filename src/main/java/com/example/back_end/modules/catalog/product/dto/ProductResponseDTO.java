@@ -3,6 +3,7 @@ package com.example.back_end.modules.catalog.product.dto;
 import lombok.*;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor
@@ -21,4 +22,9 @@ public class ProductResponseDTO {
     private Boolean isActive;
     private Instant createdAt;
     private Instant updatedAt;
+    private String primaryImageUrl;
+    private List<ProductImageDTO> images;
+    private BigDecimal storeQty;
+    private BigDecimal warehouseQty;
+    private List<com.example.back_end.modules.catalog.category.dto.CategoryDTO> categories;
 }
