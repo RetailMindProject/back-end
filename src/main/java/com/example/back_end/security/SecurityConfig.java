@@ -42,7 +42,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll() // Register & Login
                         .requestMatchers("/api/dashboard/store/**").hasAnyRole("STORE_MANAGER","CEO")
                         .requestMatchers("/api/dashboard/inventory/**").hasAnyRole("INVENTORY_MANAGER","CEO")
-                        .anyRequest().authenticated()
+                        .requestMatchers("/api/forecasting/**").permitAll()
+                                .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
