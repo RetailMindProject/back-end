@@ -28,6 +28,7 @@ import com.example.back_end.modules.catalog.product.service.ImageStorageService;
 
 import java.math.BigDecimal;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Service
@@ -158,7 +159,33 @@ public class ProductServiceImpl implements ProductService {
         if (!repository.existsById(id)) {
             throw new EntityNotFoundException("Product not found: " + id);
         }
+        
+        // Get all ProductMedia for this product before deletion
+        List<ProductMedia> productMediaList = productMediaRepository.findByProductIdOrderBySortOrderAsc(id);
+        
+        // Delete physical files from storage
+        for (ProductMedia productMedia : productMediaList) {
+            if (productMedia.getMedia() != null && productMedia.getMedia().getUrl() != null) {
+                String url = productMedia.getMedia().getUrl();
+                // URL format: /api/products/{productId}/images/{fileName}
+                try {
+                    String fileName = url.substring(url.lastIndexOf('/') + 1);
+                    imageStorageService.delete(id, fileName);
+                } catch (Exception e) {
+                    // Log but don't fail if file deletion fails
+                    // The database records will still be deleted
+                }
+            }
+        }
+        
+        // Delete the product (this will cascade delete ProductMedia due to orphanRemoval = true)
         repository.deleteById(id);
+        
+        // Find and delete orphaned Media records (Media not referenced by any ProductMedia)
+        List<Media> orphanedMedia = mediaRepository.findOrphanedMedia();
+        if (!orphanedMedia.isEmpty()) {
+            mediaRepository.deleteAll(orphanedMedia);
+        }
     }
 
     @Override
@@ -296,6 +323,9 @@ public class ProductServiceImpl implements ProductService {
         ProductMedia productMedia = productMediaRepository.findByProductIdAndMediaId(productId, mediaId)
                 .orElseThrow(() -> new EntityNotFoundException("Image not found for this product"));
 
+        // Get mediaId before deletion
+        Long mediaIdToCheck = productMedia.getMedia() != null ? productMedia.getMedia().getId() : null;
+        
         // Extract filename from URL and delete physical file
         if (productMedia.getMedia() != null && productMedia.getMedia().getUrl() != null) {
             String url = productMedia.getMedia().getUrl();
@@ -310,6 +340,15 @@ public class ProductServiceImpl implements ProductService {
         }
 
         productMediaRepository.delete(productMedia);
+        
+        // Check if this Media is now orphaned (not used by any other ProductMedia)
+        if (mediaIdToCheck != null) {
+            List<Media> orphanedMedia = mediaRepository.findOrphanedMedia();
+            orphanedMedia.stream()
+                    .filter(m -> m.getId().equals(mediaIdToCheck))
+                    .findFirst()
+                    .ifPresent(mediaRepository::delete);
+        }
     }
 
     @Override
