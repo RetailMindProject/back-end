@@ -1,13 +1,16 @@
 package com.example.back_end.modules.cashier.service;
 
+import com.example.back_end.exception.BusinessRuleException;
+import com.example.back_end.exception.ResourceNotFoundException;
 import com.example.back_end.modules.cashier.dto.CashierDetailsDTO;
+import com.example.back_end.modules.cashier.dto.CloseSessionRequest;
 import com.example.back_end.modules.cashier.dto.SessionCardDTO;
 import com.example.back_end.modules.cashier.dto.SessionFilterDTO;
 import com.example.back_end.modules.cashier.repository.CashierOrderRepository;
-import com.example.back_end.modules.cashier.repository.PaymentRepository;
+import com.example.back_end.modules.sales.payment.repository.PaymentRepository;
 import com.example.back_end.modules.cashier.repository.SessionRepository;
 import com.example.back_end.modules.sales.order.entity.Order;
-import com.example.back_end.modules.sales.session.entity.Session;
+import com.example.back_end.modules.cashier.entity.Session;
 import com.example.back_end.modules.register.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -161,6 +164,40 @@ public class SessionServiceImpl implements SessionService {
         return sessions.stream()
                 .map(this::mapToSessionCardDTO)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public SessionCardDTO closeSession(Long sessionId, CloseSessionRequest request) {
+        log.info("Closing session {} with closing amount: {}", sessionId, request.getClosingAmount());
+
+        // Find session
+        Session session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Session not found with id: " + sessionId));
+
+        // Check if session is already closed
+        if (session.getStatus() == Session.SessionStatus.CLOSED) {
+            throw new BusinessRuleException("Session is already closed");
+        }
+
+        // Update session status to CLOSED
+        session.setStatus(Session.SessionStatus.CLOSED);
+
+        // Set closedAt = now
+        session.setClosedAt(LocalDateTime.now());
+
+        // Optionally save closingAmount if provided
+        if (request.getClosingAmount() != null) {
+            session.setClosingAmount(request.getClosingAmount());
+        }
+
+        // Save session
+        sessionRepository.save(session);
+
+        log.info("Session {} closed successfully", sessionId);
+
+        // Return updated session as DTO
+        return mapToSessionCardDTO(session);
     }
 
     private SessionCardDTO mapToSessionCardDTO(Session session) {

@@ -20,12 +20,24 @@ public class OrderItem {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id")
+    @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id")
     private Product product;
+
+    // ========================================
+    // 🆕 Product info at time of sale (added)
+    // ========================================
+
+
+
+
+
+    // ========================================
+    // Quantities and prices (modified)
+    // ========================================
 
     @Column(name = "quantity", nullable = false, precision = 10, scale = 2)
     private BigDecimal quantity;
@@ -34,15 +46,31 @@ public class OrderItem {
     private BigDecimal unitPrice;
 
     @Column(name = "line_discount", precision = 12, scale = 2)
-    private BigDecimal lineDiscount;
+    private BigDecimal lineDiscount = BigDecimal.ZERO;  // ✅ Keep this name (from DB)
 
     @Column(name = "tax_amount", precision = 12, scale = 2)
-    private BigDecimal taxAmount;
+    private BigDecimal taxAmount = BigDecimal.ZERO;
 
     @Column(name = "line_total", nullable = false, precision = 12, scale = 2)
     private BigDecimal lineTotal;
 
+
+
     @Column(name = "offer_id")
     private Long offerId;
-}
 
+
+
+
+    /**
+     * Alias for lineDiscount (to match Service code)
+     */
+    @Transient
+    public BigDecimal getDiscountAmount() {
+        return lineDiscount;
+    }
+
+    public void setDiscountAmount(BigDecimal discountAmount) {
+        this.lineDiscount = discountAmount;
+    }
+}
