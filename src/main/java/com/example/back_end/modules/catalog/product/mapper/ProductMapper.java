@@ -1,20 +1,22 @@
 package com.example.back_end.modules.catalog.product.mapper;
 
+import com.example.back_end.modules.catalog.category.dto.CategoryDTO;
+import com.example.back_end.modules.catalog.category.entity.Category;
 import com.example.back_end.modules.catalog.product.dto.ProductCreateDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductImageDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductResponseDTO;
+import com.example.back_end.modules.catalog.product.dto.ProductSimpleDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductUpdateDTO;
 import com.example.back_end.modules.catalog.product.entity.Product;
 import com.example.back_end.modules.catalog.product.entity.ProductMedia;
 import com.example.back_end.modules.store_product.entity.StockSnapshot;
-import com.example.back_end.modules.catalog.category.mapper.CategoryMapper;
-import com.example.back_end.modules.catalog.category.entity.Category;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashSet;
-import java.util.Set;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
+
 
 public final class ProductMapper {
 
@@ -107,7 +109,7 @@ public final class ProductMapper {
                     if (b.getName() == null) return -1;
                     return a.getName().compareToIgnoreCase(b.getName());
                 })
-                .map(CategoryMapper::toDto)
+                .map(ProductMapper::categoryToDto)
                 .collect(Collectors.toList()));
 
         return dto;
@@ -141,6 +143,34 @@ public final class ProductMapper {
                 .altText(productMedia.getMedia().getAltText())
                 .sortOrder(productMedia.getSortOrder())
                 .isPrimary(productMedia.getIsPrimary())
+                .build();
+    }
+
+    /**
+     * Convert to ProductSimpleDTO (lightweight for POS cart)
+     */
+    public static ProductSimpleDTO toSimpleDTO(Product entity) {
+        if (entity == null) return null;
+        return ProductSimpleDTO.builder()
+                .id(entity.getId())
+                .sku(entity.getSku())
+                .name(entity.getName())
+                .defaultPrice(entity.getDefaultPrice())
+                .taxRate(entity.getTaxRate())
+                .unit(entity.getUnit())
+                .build();
+    }
+
+    /**
+     * Helper method to convert Category to CategoryDTO
+     */
+    private static CategoryDTO categoryToDto(Category entity) {
+        if (entity == null) return null;
+        return CategoryDTO.builder()
+                .id(entity.getId())
+                .name(entity.getName())
+                .parentId(entity.getParent() != null ? entity.getParent().getId() : null)
+                .parentName(entity.getParent() != null ? entity.getParent().getName() : null)
                 .build();
     }
 }

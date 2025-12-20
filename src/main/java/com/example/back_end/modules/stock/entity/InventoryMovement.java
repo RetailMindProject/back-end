@@ -1,6 +1,8 @@
-package com.example.back_end.modules.store_product.entity;
+package com.example.back_end.modules.stock.entity;
 
 import com.example.back_end.modules.catalog.product.entity.Product;
+import com.example.back_end.modules.stock.enums.InventoryLocationType;
+import com.example.back_end.modules.stock.enums.InventoryRefType;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -26,12 +28,14 @@ public class InventoryMovement {
     private Product product;
 
     // 'WAREHOUSE' or 'STORE'
+    @Enumerated(EnumType.STRING)
     @Column(name = "location_type", length = 20, nullable = false)
-    private String locationType;
+    private InventoryLocationType locationType;
 
     // 'PURCHASE','SALE','RETURN','TRANSFER','ADJUSTMENT'
+    @Enumerated(EnumType.STRING)
     @Column(name = "ref_type", length = 20, nullable = false)
-    private String refType;
+    private InventoryRefType refType;
 
     @Column(name = "ref_id")
     private Long refId;

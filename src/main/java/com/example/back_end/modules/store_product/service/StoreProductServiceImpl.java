@@ -5,10 +5,10 @@ import com.example.back_end.modules.catalog.product.repository.ProductRepository
 import com.example.back_end.modules.store_product.dto.AdjustQuantityDTO;
 import com.example.back_end.modules.store_product.dto.StoreProductResponseDTO;
 import com.example.back_end.modules.store_product.dto.StoreTransferRequestDTO;
-import com.example.back_end.modules.store_product.entity.InventoryMovement;
+import com.example.back_end.modules.stock.enums.InventoryLocationType;
+import com.example.back_end.modules.stock.enums.InventoryRefType;
 import com.example.back_end.modules.store_product.entity.StockSnapshot;
 import com.example.back_end.modules.store_product.mapper.StoreProductMapper;
-import com.example.back_end.modules.store_product.repository.InventoryMovementRepository;
 import com.example.back_end.modules.store_product.repository.StockSnapshotRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -27,14 +27,7 @@ import java.time.Instant;
 public class StoreProductServiceImpl implements StoreProductService {
 
     private final ProductRepository productRepository;
-    private final InventoryMovementRepository movementRepository;
     private final StockSnapshotRepository snapshotRepository;
-
-    private static final String LOCATION_WAREHOUSE = "WAREHOUSE";
-    private static final String LOCATION_STORE = "STORE";
-    private static final String REF_TRANSFER = "TRANSFER";
-    private static final String REF_PURCHASE = "PURCHASE";
-    private static final String REF_ADJUSTMENT = "ADJUSTMENT";
 
     @Override
     public StoreProductResponseDTO addToInventory(StoreTransferRequestDTO dto) {
@@ -52,18 +45,6 @@ public class StoreProductServiceImpl implements StoreProductService {
         // load / create snapshot
         StockSnapshot snapshot = getOrCreateSnapshot(product.getId());
         BigDecimal currentWarehouseQty = nvl(snapshot.getWarehouseQty());
-
-        // warehouse IN with PURCHASE status
-        InventoryMovement purchaseMove = InventoryMovement.builder()
-                .product(product)
-                .locationType(LOCATION_WAREHOUSE)
-                .refType(REF_PURCHASE)
-                .qtyChange(qty)
-                .unitCost(unitCost)
-                .note(dto.getNote())
-                .build();
-
-        movementRepository.save(purchaseMove);
 
         // update snapshot
         snapshot.setWarehouseQty(currentWarehouseQty.add(qty));
@@ -95,28 +76,6 @@ public class StoreProductServiceImpl implements StoreProductService {
         BigDecimal unitCost = dto.getUnitCost() != null ? dto.getUnitCost() : 
                 (product.getDefaultCost() != null ? product.getDefaultCost() : BigDecimal.ZERO);
 
-        // warehouse OUT
-        InventoryMovement whMove = InventoryMovement.builder()
-                .product(product)
-                .locationType(LOCATION_WAREHOUSE)
-                .refType(REF_TRANSFER)
-                .qtyChange(qty.negate())
-                .unitCost(unitCost)
-                .note(dto.getNote())
-                .build();
-
-        // store IN
-        InventoryMovement storeMove = InventoryMovement.builder()
-                .product(product)
-                .locationType(LOCATION_STORE)
-                .refType(REF_TRANSFER)
-                .qtyChange(qty)
-                .unitCost(unitCost)
-                .note(dto.getNote())
-                .build();
-
-        movementRepository.save(whMove);
-        movementRepository.save(storeMove);
 
         // update snapshot
         snapshot.setWarehouseQty(availableWarehouse.subtract(qty));
@@ -149,28 +108,6 @@ public class StoreProductServiceImpl implements StoreProductService {
         BigDecimal unitCost = dto.getUnitCost() != null ? dto.getUnitCost() : 
                 (product.getDefaultCost() != null ? product.getDefaultCost() : BigDecimal.ZERO);
 
-        // store OUT
-        InventoryMovement storeMove = InventoryMovement.builder()
-                .product(product)
-                .locationType(LOCATION_STORE)
-                .refType(REF_TRANSFER)
-                .qtyChange(qty.negate())
-                .unitCost(unitCost)
-                .note(dto.getNote())
-                .build();
-
-        // warehouse IN
-        InventoryMovement whMove = InventoryMovement.builder()
-                .product(product)
-                .locationType(LOCATION_WAREHOUSE)
-                .refType(REF_TRANSFER)
-                .qtyChange(qty)
-                .unitCost(unitCost)
-                .note(dto.getNote())
-                .build();
-
-        movementRepository.save(storeMove);
-        movementRepository.save(whMove);
 
         // update snapshot
         snapshot.setStoreQty(availableStore.subtract(qty));
@@ -201,16 +138,6 @@ public class StoreProductServiceImpl implements StoreProductService {
         StockSnapshot snapshot = getOrCreateSnapshot(product.getId());
         BigDecimal currentStoreQty = nvl(snapshot.getStoreQty());
 
-        // Store IN with ADJUSTMENT status
-        InventoryMovement adjustment = InventoryMovement.builder()
-                .product(product)
-                .locationType(LOCATION_STORE)
-                .refType(REF_ADJUSTMENT)
-                .qtyChange(qty)
-                .note(dto.getNote())
-                .build();
-
-        movementRepository.save(adjustment);
 
         // update snapshot
         snapshot.setStoreQty(currentStoreQty.add(qty));
@@ -238,16 +165,6 @@ public class StoreProductServiceImpl implements StoreProductService {
                     "Available: " + currentStoreQty + ", requested: " + qty);
         }
 
-        // Store OUT with ADJUSTMENT status
-        InventoryMovement adjustment = InventoryMovement.builder()
-                .product(product)
-                .locationType(LOCATION_STORE)
-                .refType(REF_ADJUSTMENT)
-                .qtyChange(qty.negate())
-                .note(dto.getNote())
-                .build();
-
-        movementRepository.save(adjustment);
 
         // update snapshot
         snapshot.setStoreQty(currentStoreQty.subtract(qty));
@@ -270,16 +187,6 @@ public class StoreProductServiceImpl implements StoreProductService {
         StockSnapshot snapshot = getOrCreateSnapshot(product.getId());
         BigDecimal currentWarehouseQty = nvl(snapshot.getWarehouseQty());
 
-        // Warehouse IN with ADJUSTMENT status
-        InventoryMovement adjustment = InventoryMovement.builder()
-                .product(product)
-                .locationType(LOCATION_WAREHOUSE)
-                .refType(REF_ADJUSTMENT)
-                .qtyChange(qty)
-                .note(dto.getNote())
-                .build();
-
-        movementRepository.save(adjustment);
 
         // update snapshot
         snapshot.setWarehouseQty(currentWarehouseQty.add(qty));
@@ -307,16 +214,6 @@ public class StoreProductServiceImpl implements StoreProductService {
                     "Available: " + currentWarehouseQty + ", requested: " + qty);
         }
 
-        // Warehouse OUT with ADJUSTMENT status
-        InventoryMovement adjustment = InventoryMovement.builder()
-                .product(product)
-                .locationType(LOCATION_WAREHOUSE)
-                .refType(REF_ADJUSTMENT)
-                .qtyChange(qty.negate())
-                .note(dto.getNote())
-                .build();
-
-        movementRepository.save(adjustment);
 
         // update snapshot
         snapshot.setWarehouseQty(currentWarehouseQty.subtract(qty));

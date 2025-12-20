@@ -9,6 +9,8 @@ import org.springframework.data.repository.query.Param;
 import com.example.back_end.modules.catalog.product.entity.Product;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
 
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
@@ -53,4 +55,55 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
                          @Param("maxPrice") BigDecimal maxPrice,
                          @Param("sku") String sku,
                          Pageable pageable);
+
+
+                         Optional<Product> findBySku(String sku);
+    
+    /**
+     * Find all active products (for POS catalog)
+     */
+    @Query("SELECT p FROM Product p WHERE p.isActive = true ORDER BY p.name")
+    List<Product> findAllActiveProducts();
+    
+    /**
+     * Find products by category (most important for POS!)
+     */
+    @Query(value = """
+           SELECT p.* FROM products p
+           JOIN product_categories pc ON p.id = pc.product_id
+           WHERE pc.category_id = :categoryId 
+             AND p.is_active = true
+           ORDER BY p.name
+           """, nativeQuery = true)
+    List<Product> findProductsByCategoryId(@Param("categoryId") Long categoryId);
+    
+    /**
+     * Find products by category with pagination
+     */
+    @Query(value = """
+           SELECT p.* FROM products p
+           JOIN product_categories pc ON p.id = pc.product_id
+           WHERE pc.category_id = :categoryId 
+             AND p.is_active = true
+           ORDER BY p.name
+           """,
+           countQuery = """
+           SELECT COUNT(*) FROM products p
+           JOIN product_categories pc ON p.id = pc.product_id
+           WHERE pc.category_id = :categoryId 
+             AND p.is_active = true
+           """,
+           nativeQuery = true)
+    Page<Product> findProductsByCategoryIdPaginated(@Param("categoryId") Long categoryId, Pageable pageable);
+    
+    /**
+     * Simple search for POS (no filters, just name/sku)
+     */
+    @Query("SELECT p FROM Product p " +
+           "WHERE p.isActive = true " +
+           "AND (LOWER(p.name) LIKE LOWER(CONCAT('%', :search, '%')) " +
+           "OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :search, '%'))) " +
+           "ORDER BY p.name")
+    List<Product> quickSearch(@Param("search") String search);
+
 }

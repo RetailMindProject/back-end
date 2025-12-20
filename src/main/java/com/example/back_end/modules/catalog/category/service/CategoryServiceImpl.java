@@ -15,9 +15,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -29,11 +26,12 @@ public class CategoryServiceImpl implements CategoryService {
 
     private final CategoryRepository categories;
     private final ProductRepository products;
+    private final CategoryMapper mapper;
 
     @Override
     public List<CategoryDTO> getAll() {
         return categories.findAll(Sort.by(Sort.Direction.ASC, "name")).stream()
-                .map(CategoryMapper::toDto)
+                .map(mapper::toDto)
                 .collect(Collectors.toList());
     }
 
@@ -51,7 +49,44 @@ public class CategoryServiceImpl implements CategoryService {
             }
         }
         return expanded.stream()
-                .map(CategoryMapper::toDto)
+                .map(mapper::toDto)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public CategoryDTO getById(Long id) {
+        Category category = categories.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Category not found: " + id));
+        return mapper.toDtoWithChildren(category);
+    }
+
+    @Override
+    public List<CategoryDTO> getAllCategoriesHierarchy() {
+        List<Category> parentCategories = categories.findAllParentCategories();
+        return parentCategories.stream()
+                .map(mapper::toDtoWithChildren)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<CategoryDTO> getAllParentCategories() {
+        List<Category> parentCategories = categories.findAllParentCategories();
+        return parentCategories.stream()
+                .map(mapper::toDto)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<CategoryDTO> getSubCategories(Long parentId) {
+        if (!categories.existsById(parentId)) {
+            throw new EntityNotFoundException("Parent category not found: " + parentId);
+        }
+        List<Category> subCategories = categories.findSubCategoriesByParentId(parentId);
+        return subCategories.stream()
+                .map(cat -> {
+                    int productCount = (int) categories.countProductsByCategoryId(cat.getId());
+                    return mapper.toDtoWithProductCount(cat, productCount);
+                })
                 .collect(Collectors.toList());
     }
 
@@ -71,7 +106,7 @@ public class CategoryServiceImpl implements CategoryService {
                 .name(name)
                 .parent(parent)
                 .build());
-        return CategoryMapper.toDto(saved);
+        return mapper.toDto(saved);
     }
 
     @Override
@@ -101,7 +136,7 @@ public class CategoryServiceImpl implements CategoryService {
         }
 
         Category saved = categories.save(cat);
-        return CategoryMapper.toDto(saved);
+        return mapper.toDto(saved);
     }
 
     @Override
@@ -115,29 +150,10 @@ public class CategoryServiceImpl implements CategoryService {
 
     @Override
     public List<CategoryTreeDTO> getTree() {
-        List<Category> all = categories.findAll(Sort.by(Sort.Direction.ASC, "name"));
-        Map<Long, CategoryTreeDTO> map = new HashMap<>();
-        List<CategoryTreeDTO> roots = new ArrayList<>();
-
-        for (Category c : all) {
-            CategoryTreeDTO dto = CategoryTreeDTO.builder()
-                    .id(c.getId())
-                    .name(c.getName())
-                    .parentId(c.getParent() != null ? c.getParent().getId() : null)
-                    .children(new ArrayList<>())
-                    .build();
-            map.put(c.getId(), dto);
-        }
-
-        for (Category c : all) {
-            CategoryTreeDTO dto = map.get(c.getId());
-            if (c.getParent() != null && map.containsKey(c.getParent().getId())) {
-                map.get(c.getParent().getId()).getChildren().add(dto);
-            } else {
-                roots.add(dto);
-            }
-        }
-        return roots;
+        List<Category> parentCategories = categories.findAllParentCategories();
+        return parentCategories.stream()
+                .map(mapper::toTreeDto)
+                .collect(Collectors.toList());
     }
 }
 

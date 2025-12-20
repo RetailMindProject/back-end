@@ -14,7 +14,8 @@ import java.util.Set;
 
 @Getter
 @Setter
-@Data
+@ToString(exclude = {"categories"})
+@EqualsAndHashCode(exclude = {"categories"})
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
