@@ -50,9 +50,8 @@ public class SecurityConfig {
 
                         .requestMatchers("/api/dashboard/store/**").hasAnyRole("STORE_MANAGER","CEO")
                         .requestMatchers("/api/dashboard/inventory/**").hasAnyRole("INVENTORY_MANAGER","CEO")
-
-                        // All other requests need authentication
-                        .anyRequest().authenticated()
+                        .requestMatchers("/api/forecasting/**").permitAll()
+                                .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 

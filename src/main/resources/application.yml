@@ -4,5 +4,9 @@ spring:
 
   profiles:
     active: dev
+  forecasting:
+    service:
+      base-url: http://localhost:8001
+
 
   
