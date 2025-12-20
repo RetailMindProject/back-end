@@ -6,19 +6,19 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Getter
 @Setter
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CategoryDTO {
+@Builder
+public class CategoryTreeDTO {
     private Long id;
     private String name;
     private Long parentId;
-    private String parentName;
-    private List<CategoryDTO> subCategories;
-    private Integer productCount;
+    @Builder.Default
+    private List<CategoryTreeDTO> children = new ArrayList<>();
 }
 

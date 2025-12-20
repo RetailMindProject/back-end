@@ -1,24 +1,20 @@
 package com.example.back_end.modules.catalog.category.dto;
 
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.util.List;
-
 @Getter
 @Setter
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CategoryDTO {
-    private Long id;
+@Builder
+public class CategoryUpdateDTO {
+    @Size(max = 80)
     private String name;
-    private Long parentId;
-    private String parentName;
-    private List<CategoryDTO> subCategories;
-    private Integer productCount;
+    private Long parentId; // optional; null clears parent
 }
 

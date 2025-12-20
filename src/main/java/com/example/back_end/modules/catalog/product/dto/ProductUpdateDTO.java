@@ -40,11 +40,14 @@ public class ProductUpdateDTO {
 
     private Boolean isActive;
 
+    private Long parentCategoryId;
+    
+    private Long subCategoryId; // optional
+
     // Option 1: Replace all images (backward compatible)
     private java.util.Set<Long> mediaIds;
 
     // Option 2: Granular control (add, remove, update)
     private java.util.Set<Long> mediaIdsToAdd;
     private java.util.Set<Long> mediaIdsToRemove;
-//    private java.util.Set<com.example.back_end.modules.catalog.product.dto.ProductImageUpdateDTO> imagesToUpdate;
 }

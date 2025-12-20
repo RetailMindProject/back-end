@@ -2,23 +2,24 @@ package com.example.back_end.modules.store_product.service;
 
 import com.example.back_end.modules.catalog.product.entity.Product;
 import com.example.back_end.modules.catalog.product.repository.ProductRepository;
+import com.example.back_end.modules.store_product.dto.AdjustQuantityDTO;
 import com.example.back_end.modules.store_product.dto.StoreProductResponseDTO;
 import com.example.back_end.modules.store_product.dto.StoreTransferRequestDTO;
-import com.example.back_end.modules.stock.entity.InventoryMovement;
 import com.example.back_end.modules.stock.enums.InventoryLocationType;
 import com.example.back_end.modules.stock.enums.InventoryRefType;
 import com.example.back_end.modules.store_product.entity.StockSnapshot;
 import com.example.back_end.modules.store_product.mapper.StoreProductMapper;
-import com.example.back_end.modules.stock.repository.InventoryMovementRepository;
 import com.example.back_end.modules.store_product.repository.StockSnapshotRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -26,9 +27,32 @@ import java.util.List;
 public class StoreProductServiceImpl implements StoreProductService {
 
     private final ProductRepository productRepository;
-    private final InventoryMovementRepository movementRepository;
     private final StockSnapshotRepository snapshotRepository;
 
+    @Override
+    public StoreProductResponseDTO addToInventory(StoreTransferRequestDTO dto) {
+        Product product = productRepository.findById(dto.getProductId())
+                .orElseThrow(() -> new EntityNotFoundException("Product not found: " + dto.getProductId()));
+
+        BigDecimal qty = dto.getQuantity();
+        if (qty == null || qty.signum() <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than 0");
+        }
+
+        BigDecimal unitCost = dto.getUnitCost() != null ? dto.getUnitCost() : 
+                (product.getDefaultCost() != null ? product.getDefaultCost() : BigDecimal.ZERO);
+
+        // load / create snapshot
+        StockSnapshot snapshot = getOrCreateSnapshot(product.getId());
+        BigDecimal currentWarehouseQty = nvl(snapshot.getWarehouseQty());
+
+        // update snapshot
+        snapshot.setWarehouseQty(currentWarehouseQty.add(qty));
+        snapshot.setLastUpdatedAt(Instant.now());
+        snapshotRepository.save(snapshot);
+
+        return StoreProductMapper.fromSnapshotForTransfer(product, snapshot);
+    }
 
     @Override
     public StoreProductResponseDTO transferFromInventoryToStore(StoreTransferRequestDTO dto) {
@@ -49,32 +73,9 @@ public class StoreProductServiceImpl implements StoreProductService {
                     "Available: " + availableWarehouse + ", requested: " + qty);
         }
 
-        BigDecimal unitCost = dto.getUnitCost() != null ? dto.getUnitCost() : product.getDefaultCost();
+        BigDecimal unitCost = dto.getUnitCost() != null ? dto.getUnitCost() : 
+                (product.getDefaultCost() != null ? product.getDefaultCost() : BigDecimal.ZERO);
 
-        // warehouse OUT
-        InventoryMovement whMove = InventoryMovement.builder()
-                .product(product)
-                .locationType(InventoryLocationType.WAREHOUSE)
-                .refType(InventoryRefType.TRANSFER)
-                .qtyChange(qty.negate())
-                .unitCost(unitCost)
-                .note(dto.getNote())
-                .movedAt(Instant.now())
-                .build();
-
-        // store IN
-        InventoryMovement storeMove = InventoryMovement.builder()
-                .product(product)
-                .locationType(InventoryLocationType.STORE)
-                .refType(InventoryRefType.TRANSFER)
-                .qtyChange(qty)
-                .unitCost(unitCost)
-                .note(dto.getNote())
-                .movedAt(Instant.now())
-                .build();
-
-        movementRepository.save(whMove);
-        movementRepository.save(storeMove);
 
         // update snapshot
         snapshot.setWarehouseQty(availableWarehouse.subtract(qty));
@@ -82,7 +83,7 @@ public class StoreProductServiceImpl implements StoreProductService {
         snapshot.setLastUpdatedAt(Instant.now());
         snapshotRepository.save(snapshot);
 
-        return StoreProductMapper.fromSnapshot(product, snapshot);
+        return StoreProductMapper.fromSnapshotForTransfer(product, snapshot);
     }
 
     @Override
@@ -104,32 +105,9 @@ public class StoreProductServiceImpl implements StoreProductService {
                     "Available: " + availableStore + ", requested: " + qty);
         }
 
-        BigDecimal unitCost = dto.getUnitCost() != null ? dto.getUnitCost() : product.getDefaultCost();
+        BigDecimal unitCost = dto.getUnitCost() != null ? dto.getUnitCost() : 
+                (product.getDefaultCost() != null ? product.getDefaultCost() : BigDecimal.ZERO);
 
-        // store OUT
-        InventoryMovement storeMove = InventoryMovement.builder()
-                .product(product)
-                .locationType(InventoryLocationType.STORE)
-                .refType(InventoryRefType.TRANSFER)
-                .qtyChange(qty.negate())
-                .unitCost(unitCost)
-                .note(dto.getNote())
-                .movedAt(Instant.now())
-                .build();
-
-        // warehouse IN
-        InventoryMovement whMove = InventoryMovement.builder()
-                .product(product)
-                .locationType(InventoryLocationType.WAREHOUSE)
-                .refType(InventoryRefType.TRANSFER)
-                .qtyChange(qty)
-                .unitCost(unitCost)
-                .note(dto.getNote())
-                .movedAt(Instant.now())
-                .build();
-
-        movementRepository.save(storeMove);
-        movementRepository.save(whMove);
 
         // update snapshot
         snapshot.setStoreQty(availableStore.subtract(qty));
@@ -137,15 +115,134 @@ public class StoreProductServiceImpl implements StoreProductService {
         snapshot.setLastUpdatedAt(Instant.now());
         snapshotRepository.save(snapshot);
 
-        return StoreProductMapper.fromSnapshot(product, snapshot);
+        return StoreProductMapper.fromSnapshotForTransfer(product, snapshot);
+    }
+
+    @Override
+    public StoreProductResponseDTO removeFromStore(StoreTransferRequestDTO dto) {
+        // Removing from store means transferring store → warehouse
+        // Same operation as transferFromStoreToInventory
+        return transferFromStoreToInventory(dto);
+    }
+
+    @Override
+    public StoreProductResponseDTO increaseStoreQuantity(AdjustQuantityDTO dto) {
+        Product product = productRepository.findById(dto.getProductId())
+                .orElseThrow(() -> new EntityNotFoundException("Product not found: " + dto.getProductId()));
+
+        BigDecimal qty = dto.getQuantity();
+        if (qty == null || qty.signum() <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than 0");
+        }
+
+        StockSnapshot snapshot = getOrCreateSnapshot(product.getId());
+        BigDecimal currentStoreQty = nvl(snapshot.getStoreQty());
+
+
+        // update snapshot
+        snapshot.setStoreQty(currentStoreQty.add(qty));
+        snapshot.setLastUpdatedAt(Instant.now());
+        snapshotRepository.save(snapshot);
+
+        return StoreProductMapper.fromSnapshotForTransfer(product, snapshot);
+    }
+
+    @Override
+    public StoreProductResponseDTO decreaseStoreQuantity(AdjustQuantityDTO dto) {
+        Product product = productRepository.findById(dto.getProductId())
+                .orElseThrow(() -> new EntityNotFoundException("Product not found: " + dto.getProductId()));
+
+        BigDecimal qty = dto.getQuantity();
+        if (qty == null || qty.signum() <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than 0");
+        }
+
+        StockSnapshot snapshot = getOrCreateSnapshot(product.getId());
+        BigDecimal currentStoreQty = nvl(snapshot.getStoreQty());
+
+        if (currentStoreQty.compareTo(qty) < 0) {
+            throw new IllegalArgumentException("Not enough quantity in store. " +
+                    "Available: " + currentStoreQty + ", requested: " + qty);
+        }
+
+
+        // update snapshot
+        snapshot.setStoreQty(currentStoreQty.subtract(qty));
+        snapshot.setLastUpdatedAt(Instant.now());
+        snapshotRepository.save(snapshot);
+
+        return StoreProductMapper.fromSnapshotForTransfer(product, snapshot);
+    }
+
+    @Override
+    public StoreProductResponseDTO increaseWarehouseQuantity(AdjustQuantityDTO dto) {
+        Product product = productRepository.findById(dto.getProductId())
+                .orElseThrow(() -> new EntityNotFoundException("Product not found: " + dto.getProductId()));
+
+        BigDecimal qty = dto.getQuantity();
+        if (qty == null || qty.signum() <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than 0");
+        }
+
+        StockSnapshot snapshot = getOrCreateSnapshot(product.getId());
+        BigDecimal currentWarehouseQty = nvl(snapshot.getWarehouseQty());
+
+
+        // update snapshot
+        snapshot.setWarehouseQty(currentWarehouseQty.add(qty));
+        snapshot.setLastUpdatedAt(Instant.now());
+        snapshotRepository.save(snapshot);
+
+        return StoreProductMapper.fromSnapshotForTransfer(product, snapshot);
+    }
+
+    @Override
+    public StoreProductResponseDTO decreaseWarehouseQuantity(AdjustQuantityDTO dto) {
+        Product product = productRepository.findById(dto.getProductId())
+                .orElseThrow(() -> new EntityNotFoundException("Product not found: " + dto.getProductId()));
+
+        BigDecimal qty = dto.getQuantity();
+        if (qty == null || qty.signum() <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than 0");
+        }
+
+        StockSnapshot snapshot = getOrCreateSnapshot(product.getId());
+        BigDecimal currentWarehouseQty = nvl(snapshot.getWarehouseQty());
+
+        if (currentWarehouseQty.compareTo(qty) < 0) {
+            throw new IllegalArgumentException("Not enough quantity in warehouse. " +
+                    "Available: " + currentWarehouseQty + ", requested: " + qty);
+        }
+
+
+        // update snapshot
+        snapshot.setWarehouseQty(currentWarehouseQty.subtract(qty));
+        snapshot.setLastUpdatedAt(Instant.now());
+        snapshotRepository.save(snapshot);
+
+        return StoreProductMapper.fromSnapshotForTransfer(product, snapshot);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<StoreProductResponseDTO> search(String q) {
-        return snapshotRepository.searchStore(q).stream()
-                .map(StoreProductMapper::fromProjection)
-                .toList();
+    public Page<StoreProductResponseDTO> search(String q, Pageable pageable) {
+        // Normalize empty string to null
+        String normalizedQ = (q != null && q.trim().isEmpty()) ? null : q;
+        return snapshotRepository.searchStore(normalizedQ, pageable)
+                .map(StoreProductMapper::fromProjection);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<StoreProductResponseDTO> filter(String brand, Boolean isActive,
+                                                BigDecimal minPrice, BigDecimal maxPrice,
+                                                String sku, Pageable pageable) {
+        // Validate price range
+        if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
+            throw new IllegalArgumentException("Minimum price cannot be greater than maximum price");
+        }
+        return snapshotRepository.filterStore(brand, isActive, minPrice, maxPrice, sku, pageable)
+                .map(StoreProductMapper::fromProjection);
     }
 
     @Override
@@ -154,8 +251,7 @@ public class StoreProductServiceImpl implements StoreProductService {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new EntityNotFoundException("Product not found: " + productId));
 
-        StockSnapshot snapshot = snapshotRepository.findById(productId)
-                .orElseThrow(() -> new EntityNotFoundException("Stock snapshot not found for product: " + productId));
+        StockSnapshot snapshot = getOrCreateSnapshot(productId);
 
         return StoreProductMapper.fromSnapshot(product, snapshot);
     }

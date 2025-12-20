@@ -1,4 +1,4 @@
-package com.example.back_end.modules.stock.repository;
+package com.example.back_end.modules.store_product.repository;
 
 import com.example.back_end.modules.stock.entity.InventoryMovement;
 import com.example.back_end.modules.stock.repository.projection.*;
@@ -9,7 +9,6 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-
 public interface InventoryMovementRepository extends JpaRepository<InventoryMovement, Long> {
 
     // إجمالي الدخول خلال فترة (WAREHOUSE فقط)
@@ -49,7 +48,7 @@ public interface InventoryMovementRepository extends JpaRepository<InventoryMove
         """, nativeQuery = true)
     Long countMovementsSince(@Param("from") LocalDateTime from);
 
-    // حركات حديثة (لجدول Recent Movements) - نفس اللي عندك
+    // حركات حديثة (لجدول Recent Movements)
     @Query(value = """
         SELECT 
             im.moved_at      AS movedAt,
@@ -87,7 +86,7 @@ public interface InventoryMovementRepository extends JpaRepository<InventoryMove
         """, nativeQuery = true)
     Long findMostMovedProductIdSince(@Param("from") LocalDateTime from);
 
-    // 🔹 Weekly Movement Trend (per day) في المخزن فقط
+    // Weekly Movement Trend (per day) في المخزن فقط
     @Query(value = """
         SELECT 
             im.moved_at::date AS movementDate,
@@ -127,6 +126,7 @@ public interface InventoryMovementRepository extends JpaRepository<InventoryMove
     List<InventoryCategoryMovementProjection> findCategoryMovementLastWeek(
             @Param("from") LocalDateTime from
     );
+
     @Query(value = """
     SELECT 
         c.name AS categoryName,
@@ -147,6 +147,7 @@ public interface InventoryMovementRepository extends JpaRepository<InventoryMove
     List<InventoryCategorySalesProjection> findCategorySalesLastWeek(
             @Param("from") LocalDateTime from
     );
+
     @Query(value = """
     SELECT 
         p.id AS productId,
@@ -170,7 +171,4 @@ public interface InventoryMovementRepository extends JpaRepository<InventoryMove
             @Param("from") LocalDateTime from,
             @Param("limit") int limit
     );
-
-
-
 }

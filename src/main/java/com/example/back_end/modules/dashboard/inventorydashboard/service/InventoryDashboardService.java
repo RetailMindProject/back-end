@@ -3,7 +3,7 @@ package com.example.back_end.modules.dashboard.inventorydashboard.service;
 import com.example.back_end.modules.dashboard.inventorydashboard.dto.*;
 import com.example.back_end.modules.catalog.product.entity.Product;
 import com.example.back_end.modules.catalog.product.repository.ProductRepository;
-import com.example.back_end.modules.stock.repository.InventoryMovementRepository;
+import com.example.back_end.modules.store_product.repository.InventoryMovementRepository;
 import com.example.back_end.modules.stock.repository.projection.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;

@@ -1,5 +1,4 @@
 package com.example.back_end.modules.catalog.product.dto;
-import com.example.back_end.modules.catalog.category.dto.CategorySimpleDTO; 
 
 import lombok.*;
 import java.math.BigDecimal;
@@ -23,8 +22,9 @@ public class ProductResponseDTO {
     private Boolean isActive;
     private Instant createdAt;
     private Instant updatedAt;
-    
-    private List<CategorySimpleDTO> categories;
-
-
+    private String primaryImageUrl;
+    private List<ProductImageDTO> images;
+    private BigDecimal storeQty;
+    private BigDecimal warehouseQty;
+    private List<com.example.back_end.modules.catalog.category.dto.CategoryDTO> categories;
 }

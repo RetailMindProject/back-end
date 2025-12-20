@@ -1,17 +1,16 @@
 package com.example.back_end.modules.catalog.category.controller;
 
 import com.example.back_end.modules.catalog.category.dto.CategoryDTO;
-import com.example.back_end.modules.catalog.category.entity.Category;
-import com.example.back_end.modules.catalog.category.repository.CategoryRepository;
+import com.example.back_end.modules.catalog.category.dto.CategoryCreateDTO;
+import com.example.back_end.modules.catalog.category.dto.CategoryUpdateDTO;
+import com.example.back_end.modules.catalog.category.dto.CategoryTreeDTO;
 import com.example.back_end.modules.catalog.category.service.CategoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/categories")
@@ -19,95 +18,57 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CategoryController {
 
-    private final CategoryRepository categoryRepository;
-    private final CategoryService categoryService;
+    private final CategoryService service;
 
     @GetMapping
-    public ResponseEntity<Map<String, Object>> getAllCategories() {
-        try {
-            List<Category> categories = categoryRepository.findAll();
-
-            List<Map<String, Object>> categoryList = categories.stream()
-                    .map(category -> {
-                        Map<String, Object> cat = new HashMap<>();
-                        cat.put("id", category.getId());
-                        cat.put("name", category.getName());
-                        return cat;
-                    })
-                    .collect(Collectors.toList());
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("data", categoryList);
-            response.put("count", categoryList.size());
-
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Error fetching categories: " + e.getMessage());
-            return ResponseEntity.status(500).body(response);
-        }
+    public ResponseEntity<List<CategoryDTO>> getAll() {
+        return ResponseEntity.ok(service.getAll());
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getCategoryById(@PathVariable Long id) {
-        try {
-            Category category = categoryRepository.findById(id)
-                    .orElseThrow(() -> new IllegalArgumentException("Category not found with ID: " + id));
-
-            Map<String, Object> categoryData = new HashMap<>();
-            categoryData.put("id", category.getId());
-            categoryData.put("name", category.getName());
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("data", categoryData);
-
-            return ResponseEntity.ok(response);
-
-        } catch (IllegalArgumentException e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.status(404).body(response);
-
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Error fetching category: " + e.getMessage());
-            return ResponseEntity.status(500).body(response);
-        }
+    @GetMapping("/tree")
+    public ResponseEntity<List<CategoryTreeDTO>> getTree() {
+        return ResponseEntity.ok(service.getTree());
     }
 
     @GetMapping("/hierarchy")
-    public ResponseEntity<List<CategoryDTO.CategoryResponse>> getCategoriesHierarchy() {
-        List<CategoryDTO.CategoryResponse> categories = categoryService.getAllCategoriesHierarchy();
-        return ResponseEntity.ok(categories);
+    public ResponseEntity<List<CategoryDTO>> getCategoriesHierarchy() {
+        return ResponseEntity.ok(service.getAllCategoriesHierarchy());
     }
 
     @GetMapping("/parents")
-    public ResponseEntity<List<CategoryDTO.CategorySimple>> getParentCategories() {
-        List<CategoryDTO.CategorySimple> categories = categoryService.getAllParentCategories();
-        return ResponseEntity.ok(categories);
+    public ResponseEntity<List<CategoryDTO>> getParentCategories() {
+        return ResponseEntity.ok(service.getAllParentCategories());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<CategoryDTO> getCategoryById(@PathVariable Long id) {
+        return ResponseEntity.ok(service.getById(id));
     }
 
     @GetMapping("/{parentId}/sub-categories")
-    public ResponseEntity<List<CategoryDTO.SubCategoryResponse>> getSubCategories(@PathVariable Long parentId) {
-        List<CategoryDTO.SubCategoryResponse> subCategories = categoryService.getSubCategories(parentId);
-        return ResponseEntity.ok(subCategories);
+    public ResponseEntity<List<CategoryDTO>> getSubCategories(@PathVariable Long parentId) {
+        return ResponseEntity.ok(service.getSubCategories(parentId));
     }
 
-    @GetMapping("/{id}/details")
-    public ResponseEntity<CategoryDTO.CategoryResponse> getCategoryDetails(@PathVariable Long id) {
-        CategoryDTO.CategoryResponse category = categoryService.getCategoryById(id);
-        return ResponseEntity.ok(category);
+    @GetMapping("/product/{productId}")
+    public ResponseEntity<List<CategoryDTO>> getByProduct(@PathVariable Long productId) {
+        return ResponseEntity.ok(service.getByProductId(productId));
     }
 
-    @GetMapping("/all")
-    public ResponseEntity<List<CategoryDTO.CategorySimple>> getAllCategoriesFlat() {
-        List<CategoryDTO.CategorySimple> categories = categoryService.getAllCategories();
-        return ResponseEntity.ok(categories);
+    @PostMapping
+    public ResponseEntity<CategoryDTO> create(@Valid @RequestBody CategoryCreateDTO dto) {
+        return ResponseEntity.ok(service.create(dto));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<CategoryDTO> update(@PathVariable Long id, @Valid @RequestBody CategoryUpdateDTO dto) {
+        return ResponseEntity.ok(service.update(id, dto));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
     }
 }
+

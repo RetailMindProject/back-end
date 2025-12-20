@@ -31,21 +31,32 @@ public class ProductController {
         return ResponseEntity.ok(service.getById(id));
     }
 
-    @GetMapping
+    // Simple search by name or SKU
+    @GetMapping("/search")
     public ResponseEntity<Page<ProductResponseDTO>> search(
             @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "name"));
+        return ResponseEntity.ok(service.search(q, pageable));
+    }
+
+    // Advanced filter with sorting
+    @GetMapping("/filter")
+    public ResponseEntity<Page<ProductResponseDTO>> filter(
             @RequestParam(required = false) String brand,
             @RequestParam(required = false) Boolean isActive,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(required = false) String sku,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "3") int size,
-            @RequestParam(defaultValue = "created_at,desc") String sort
-    ) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "created_at,desc") String sort) {
         String[] sp = sort.split(",", 2);
-        Sort.Direction dir = (sp.length > 1 && "asc".equalsIgnoreCase(sp[1])) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Sort.Direction dir = (sp.length > 1 && "asc".equalsIgnoreCase(sp[1])) 
+                ? Sort.Direction.ASC : Sort.Direction.DESC;
         Pageable pageable = PageRequest.of(page, size, Sort.by(dir, sp[0]));
-        return ResponseEntity.ok(service.search(q, brand, isActive, minPrice, maxPrice, pageable));
+        return ResponseEntity.ok(service.filter(brand, isActive, minPrice, maxPrice, sku, pageable));
     }
 
     @PutMapping("/{id}")

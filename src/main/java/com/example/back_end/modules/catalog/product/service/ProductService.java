@@ -3,25 +3,32 @@ package com.example.back_end.modules.catalog.product.service;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import com.example.back_end.modules.catalog.product.dto.AddProductMediaDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductCreateDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductResponseDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductSimpleDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductUpdateDTO;
+import com.example.back_end.modules.catalog.product.dto.UpdateProductMediaDTO;
 
 import java.math.BigDecimal;
 import java.util.List;
 
 public interface ProductService {
-    
+
     // CRUD Operations
     ProductResponseDTO create(ProductCreateDTO dto);
     ProductResponseDTO getById(Long id);
-    Page<ProductResponseDTO> search(String q, String brand, Boolean isActive,
+    Page<ProductResponseDTO> search(String q, Pageable pageable);
+    Page<ProductResponseDTO> filter(String brand, Boolean isActive,
                                     BigDecimal minPrice, BigDecimal maxPrice,
-                                    Pageable pageable);
+                                    String sku, Pageable pageable);
     ProductResponseDTO update(Long id, ProductUpdateDTO dto);
     void delete(Long id);
-    
+    ProductResponseDTO addImage(Long productId, AddProductMediaDTO dto);
+    ProductResponseDTO updateImage(Long productId, Long mediaId, UpdateProductMediaDTO dto);
+    void removeImage(Long productId, Long mediaId);
+    ProductResponseDTO setPrimaryImage(Long productId, Long mediaId);
+
     // POS Operations
     List<ProductResponseDTO> getAllActiveProducts();
     ProductSimpleDTO getProductBySku(String sku);
@@ -29,3 +36,4 @@ public interface ProductService {
     Page<ProductResponseDTO> getProductsByCategoryPaginated(Long categoryId, Pageable pageable);
     List<ProductSimpleDTO> quickSearch(String searchTerm);
 }
+
