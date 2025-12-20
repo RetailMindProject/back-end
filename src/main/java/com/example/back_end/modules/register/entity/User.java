@@ -57,6 +57,7 @@ public class User {
         CEO,
         STORE_MANAGER,
         INVENTORY_MANAGER,
-        CASHIER
+        CASHIER,
+        CUSTOMER
     }
 }
