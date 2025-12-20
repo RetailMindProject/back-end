@@ -122,21 +122,16 @@ public class OrderController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Hold order (save for later)
-     * POST /api/orders/{id}/hold
-     */
-    @PostMapping("/{id}/hold")
+
+
+
+    @PutMapping("/{id}/hold")  // 🔥 غير من POST لـ PUT
     public ResponseEntity<OrderDTO.OrderResponse> holdOrder(@PathVariable Long id) {
         OrderDTO.OrderResponse response = orderService.holdOrder(id);
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Retrieve held order
-     * POST /api/orders/{id}/retrieve
-     */
-    @PostMapping("/{id}/retrieve")
+    @PutMapping("/{id}/retrieve")  // 🔥 غير من POST لـ PUT
     public ResponseEntity<OrderDTO.OrderResponse> retrieveOrder(@PathVariable Long id) {
         OrderDTO.OrderResponse response = orderService.retrieveOrder(id);
         return ResponseEntity.ok(response);

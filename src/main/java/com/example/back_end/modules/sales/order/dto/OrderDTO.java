@@ -7,7 +7,6 @@ import lombok.NoArgsConstructor;
 
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -134,6 +133,11 @@ public class OrderDTO {
         private BigDecimal quantity;
         private BigDecimal discountAmount;
         private BigDecimal lineTotal;
+        
+        // Offer information
+        private Long offerId;
+        private String offerTitle;
+        private BigDecimal originalLineTotal; // Total before discount
     }
 
     /**
