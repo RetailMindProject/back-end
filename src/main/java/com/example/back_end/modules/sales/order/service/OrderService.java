@@ -6,6 +6,8 @@ import com.example.back_end.modules.cashier.entity.Session;
 import com.example.back_end.modules.cashier.repository.SessionRepository;
 import com.example.back_end.modules.catalog.product.entity.Product;
 import com.example.back_end.modules.catalog.product.repository.ProductRepository;
+import com.example.back_end.modules.offer.entity.Offer;
+import com.example.back_end.modules.offer.service.ProductOfferService;
 import com.example.back_end.modules.sales.order.dto.OrderDTO;
 import com.example.back_end.modules.sales.order.entity.Order;
 import com.example.back_end.modules.sales.order.entity.OrderItem;
@@ -38,6 +40,7 @@ public class OrderService {
     private final SessionRepository sessionRepository;
     private final ProductRepository productRepository;
     private final OrderMapper orderMapper;
+    private final ProductOfferService productOfferService;
 
     /**
      * Create new order
@@ -105,7 +108,15 @@ public class OrderService {
             item.setProduct(product);
             item.setUnitPrice(product.getDefaultPrice());
             item.setQuantity(request.getQuantity());
-            item.setLineDiscount(request.getDiscountAmount() != null ? request.getDiscountAmount() : BigDecimal.ZERO);
+        }
+
+        // Apply PRODUCT offer automatically (if manual discount not provided)
+        if (request.getDiscountAmount() == null || request.getDiscountAmount().compareTo(BigDecimal.ZERO) == 0) {
+            applyProductOffer(item);
+        } else {
+            // Manual discount provided - use it instead of offer
+            item.setLineDiscount(request.getDiscountAmount());
+            item.setOfferId(null);
         }
 
         // Calculate line total
@@ -165,6 +176,11 @@ public class OrderService {
             orderItemRepository.delete(item);
         } else {
             item.setQuantity(newQuantity);
+            
+            // Re-apply PRODUCT offer when quantity changes (if no manual discount was set)
+            if (item.getOfferId() != null || item.getLineDiscount() == null || item.getLineDiscount().compareTo(BigDecimal.ZERO) == 0) {
+                applyProductOffer(item);
+            }
     
             BigDecimal lineDiscount = item.getLineDiscount() != null ? item.getLineDiscount() : BigDecimal.ZERO;
             BigDecimal taxAmount = item.getTaxAmount() != null ? item.getTaxAmount() : BigDecimal.ZERO;
@@ -432,5 +448,38 @@ public class OrderService {
         order.setGrandTotal(grandTotal);
 
         orderRepository.save(order);
+    }
+
+    /**
+     * Apply PRODUCT offer to order item automatically
+     * Finds the best active offer and applies it to the item
+     */
+    private void applyProductOffer(OrderItem item) {
+        if (item.getProduct() == null || item.getProduct().getId() == null) {
+            return;
+        }
+
+        // Find best offer for this product
+        Optional<Offer> bestOffer = productOfferService.findBestProductOffer(
+                item.getProduct().getId(),
+                item.getUnitPrice(),
+                item.getQuantity()
+        );
+
+        if (bestOffer.isPresent()) {
+            Offer offer = bestOffer.get();
+            BigDecimal discount = productOfferService.calculateProductOfferDiscount(
+                    offer,
+                    item.getUnitPrice(),
+                    item.getQuantity()
+            );
+
+            item.setOfferId(offer.getId());
+            item.setLineDiscount(discount);
+        } else {
+            // No offer found - clear any previous offer
+            item.setOfferId(null);
+            item.setLineDiscount(BigDecimal.ZERO);
+        }
     }
 }

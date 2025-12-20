@@ -20,6 +20,10 @@ public class OrderMapper {
      * Map OrderItem to OrderItemResponse
      */
     public OrderDTO.OrderItemResponse toOrderItemResponse(OrderItem item) {
+        // Calculate original line total (before discount)
+        BigDecimal originalLineTotal = item.getUnitPrice()
+                .multiply(item.getQuantity());
+        
         return OrderDTO.OrderItemResponse.builder()
                 .id(item.getId())
                 .productId(item.getProduct() != null ? item.getProduct().getId() : null)
@@ -27,6 +31,8 @@ public class OrderMapper {
                 .quantity(item.getQuantity())
                 .discountAmount(item.getDiscountAmount())
                 .lineTotal(item.getLineTotal())
+                .offerId(item.getOfferId())
+                .originalLineTotal(originalLineTotal)
                 .build();
     }
 

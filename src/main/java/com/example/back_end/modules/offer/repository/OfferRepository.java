@@ -51,4 +51,20 @@ public interface OfferRepository extends JpaRepository<Offer, Long>, JpaSpecific
             "LEFT JOIN FETCH o.orderOffer " +
             "WHERE o.id = :id")
     Optional<Offer> findByIdWithOrderOffer(@Param("id") Long id);
+
+    /**
+     * Find active PRODUCT offers for a specific product
+     * Used for automatic offer application when adding products to order
+     */
+    @Query("SELECT DISTINCT o FROM Offer o " +
+            "INNER JOIN o.offerProducts op " +
+            "WHERE op.product.id = :productId " +
+            "AND o.offerType = 'PRODUCT' " +
+            "AND o.isActive = true " +
+            "AND o.startAt <= :currentDate " +
+            "AND o.endAt >= :currentDate")
+    List<Offer> findActiveProductOffersForProduct(
+            @Param("productId") Long productId,
+            @Param("currentDate") LocalDateTime currentDate
+    );
 }
