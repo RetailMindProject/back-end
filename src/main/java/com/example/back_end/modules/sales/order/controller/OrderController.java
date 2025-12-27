@@ -103,7 +103,7 @@ public class OrderController {
     }
 
     /**
-     * Get draft/held orders for session
+     * Get draft/hold orders for session
      * GET /api/orders/session/{sessionId}/drafts
      */
     @GetMapping("/session/{sessionId}/drafts")

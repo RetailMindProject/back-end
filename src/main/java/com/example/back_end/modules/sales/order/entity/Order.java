@@ -115,7 +115,7 @@ public class Order {
 
     public enum OrderStatus {
         DRAFT,      // New order being created
-        HELD,       // Saved for later
+        HOLD,       // Saved for later
         PAID,       // Payment completed
         CANCELLED,  // Cancelled/voided
         RETURNED    // Returned/refunded
