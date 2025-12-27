@@ -370,7 +370,7 @@ public class OrderService {
             throw new BusinessRuleException("Cannot hold paid order");
         }
 
-        order.setStatus(Order.OrderStatus.HELD);
+        order.setStatus(Order.OrderStatus.HOLD);
         orderRepository.save(order);
 
         return getOrderById(orderId);
@@ -384,7 +384,7 @@ public class OrderService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
 
-        if (order.getStatus() != Order.OrderStatus.HELD) {
+        if (order.getStatus() != Order.OrderStatus.HOLD) {
             throw new BusinessRuleException("Only held orders can be retrieved");
         }
 

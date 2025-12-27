@@ -31,7 +31,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     /**
      * Find draft/held orders by session (for retrieving saved orders)
      */
-    @Query("SELECT o FROM Order o WHERE o.session.id = :sessionId AND o.status IN ('DRAFT', 'HELD') ORDER BY o.createdAt DESC")
+    @Query("SELECT o FROM Order o WHERE o.session.id = :sessionId AND o.status IN ('DRAFT', 'HOLD') ORDER BY o.createdAt DESC")
     List<Order> findDraftOrdersBySession(@Param("sessionId") Long sessionId);
 
     /**
