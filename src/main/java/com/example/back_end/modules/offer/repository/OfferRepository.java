@@ -67,4 +67,33 @@ public interface OfferRepository extends JpaRepository<Offer, Long>, JpaSpecific
             @Param("productId") Long productId,
             @Param("currentDate") LocalDateTime currentDate
     );
+
+
+    @Query("""
+        SELECT DISTINCT o FROM Offer o
+        JOIN OfferCategory oc ON o.id = oc.offer.id
+        JOIN ProductCategory pc ON oc.category.id = pc.category.id
+        WHERE pc.product.id = :productId
+          AND o.offerType = 'CATEGORY'
+          AND o.isActive = true
+          AND :now BETWEEN o.startAt AND o.endAt
+        ORDER BY o.discountValue DESC
+    """)
+    List<Offer> findActiveCategoryOffersForProduct(
+            @Param("productId") Long productId,
+            @Param("now") LocalDateTime now
+    );
+
+    /**
+     * Find active BUNDLE offers
+     */
+    @Query("""
+    SELECT DISTINCT o FROM Offer o
+    WHERE o.offerType = 'BUNDLE'
+      AND o.isActive = true
+      AND :now BETWEEN o.startAt AND o.endAt
+    ORDER BY o.discountValue DESC
+""")
+    List<Offer> findActiveBundleOffers(@Param("now") LocalDateTime now);
+
 }
