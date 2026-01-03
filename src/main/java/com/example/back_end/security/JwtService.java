@@ -21,10 +21,17 @@ public class JwtService {
     @Value("${jwt.expiration:86400000}") // 24 hours in milliseconds
     private Long jwtExpiration;
 
-    public String generateToken(String email, String role) {
+    // ✅ Updated - now accepts userId
+    public String generateToken(String email, String role, Long userId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("role", role);
+        claims.put("userId", userId);  // ✅ Add userId to claims
         return createToken(claims, email);
+    }
+
+    // ✅ Keep old method for backward compatibility
+    public String generateToken(String email, String role) {
+        return generateToken(email, role, null);
     }
 
     private String createToken(Map<String, Object> claims, String subject) {
@@ -51,6 +58,25 @@ public class JwtService {
 
     public String extractRole(String token) {
         return extractAllClaims(token).get("role", String.class);
+    }
+
+    // ✅ NEW - Extract userId from token
+    public Long extractUserId(String token) {
+        Claims claims = extractAllClaims(token);
+        Object userIdObj = claims.get("userId");
+
+        if (userIdObj == null) {
+            return null;
+        }
+
+        // Handle both Integer and Long
+        if (userIdObj instanceof Integer) {
+            return ((Integer) userIdObj).longValue();
+        } else if (userIdObj instanceof Long) {
+            return (Long) userIdObj;
+        }
+
+        return null;
     }
 
     public boolean isTokenValid(String token, String username) {

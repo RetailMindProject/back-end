@@ -42,6 +42,8 @@ public class TerminalDTO {
         @NotNull(message = "Closing amount is required")
         @PositiveOrZero(message = "Closing amount must be zero or positive")
         private BigDecimal closingAmount;
+        private Long terminalId;
+
     }
 
     /**

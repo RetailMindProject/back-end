@@ -1,4 +1,5 @@
 package com.example.back_end.modules.cashier.service;
+
 import com.example.back_end.modules.cashier.dto.CashierDetailsDTO;
 import com.example.back_end.modules.cashier.dto.CloseSessionRequest;
 import com.example.back_end.modules.cashier.dto.SessionCardDTO;

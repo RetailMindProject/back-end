@@ -1,10 +1,9 @@
 package com.example.back_end.modules.cashier.entity;
+
 import com.example.back_end.modules.terminal.entity.Terminal;
 import com.example.back_end.modules.register.entity.User;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
@@ -13,6 +12,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "sessions")
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class Session {
@@ -21,12 +21,18 @@ public class Session {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "terminal_id")
-    private Terminal terminal;
+    @Column(name = "terminal_id")
+    private Long terminalId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id")
+    @JoinColumn(name = "terminal_id", insertable = false, updatable = false)
+    private Terminal terminal;
+
+    @Column(name = "user_id")
+    private Long userId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", insertable = false, updatable = false)
     private User user;
 
     @CreationTimestamp
@@ -42,19 +48,14 @@ public class Session {
     @Column(name = "closing_amount", precision = 12, scale = 2)
     private BigDecimal closingAmount;
 
-    @Column(name = "user_id", insertable = false, updatable = false)
-    private Long userId;
+    @Column(name = "status", length = 20)
+    private String status = "OPEN";
 
-    @Column(length = 20)
-    @Enumerated(EnumType.STRING)
-    private SessionStatus status = SessionStatus.OPEN;
-
-    public enum SessionStatus {
-        OPEN,
-        CLOSED
-    }
-
-    public Long getUserId() {
-        return userId;
+    /**
+     * Session status constants
+     */
+    public static class SessionStatus {
+        public static final String OPEN = "OPEN";
+        public static final String CLOSED = "CLOSED";
     }
 }

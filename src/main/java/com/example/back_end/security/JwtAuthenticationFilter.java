@@ -35,10 +35,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (path.equals("/api/auth/login") ||
                 path.equals("/api/auth/test") ||
                 path.equals("/api/auth/register/ceo") ||
-                path.startsWith("/api/terminal")) {
+                path.equals("/api/terminal/pair") ||
+                path.equals("/api/terminal/pairing-status") ||
+                path.equals("/api/terminal/current") ||
+                path.equals("/api/terminal/available")) {
             filterChain.doFilter(request, response);
             return;
         }
+
 
         final String authHeader = request.getHeader("Authorization");
 
