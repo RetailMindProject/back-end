@@ -1,14 +1,21 @@
 package com.example.back_end.modules.sales.order.controller;
 
+import com.example.back_end.common.dto.BrowserContext;
+import com.example.back_end.common.filter.BrowserTokenFilter;
+import com.example.back_end.modules.cashier.entity.Session;
+import com.example.back_end.modules.cashier.service.SessionLifecycleService;
 import com.example.back_end.modules.sales.order.dto.OrderDTO;
 import com.example.back_end.modules.sales.order.service.OrderService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Controller for POS order operations
@@ -16,28 +23,65 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
+@Slf4j
 public class OrderController {
 
     private final OrderService orderService;
+    private final SessionLifecycleService lifecycleService;
 
     /**
      * Create new order
      * POST /api/orders
      */
     @PostMapping
-    public ResponseEntity<OrderDTO.OrderResponse> createOrder(
-            @Valid @RequestBody OrderDTO.CreateRequest request) {
-        OrderDTO.OrderResponse response = orderService.createOrder(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    public ResponseEntity<?> createOrder(
+            @Valid @RequestBody OrderDTO.CreateRequest request,
+            HttpServletRequest httpRequest) {
+
+        try {
+            BrowserContext context = BrowserTokenFilter.getContext(httpRequest);
+
+            if (context == null || !context.isPaired()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "No terminal is paired with this browser"));
+            }
+
+            // ✅ READ ONLY - do not create session
+            Session session = lifecycleService.getCurrentSession(context.getTerminalId());
+
+            if (session == null || !Session.SessionStatus.OPEN.equals(session.getStatus())) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "No open session. Please start a session first."));
+            }
+
+            request.setSessionId(session.getId());
+
+            OrderDTO.OrderResponse response = orderService.createOrder(request);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to create order: " + e.getMessage()));
+        }
     }
+
 
     /**
      * Add item to order
      * POST /api/orders/items
      */
     @PostMapping("/items")
-    public ResponseEntity<OrderDTO.OrderResponse> addItem(
-            @Valid @RequestBody OrderDTO.AddItemRequest request) {
+    public ResponseEntity<?> addItem(
+            @Valid @RequestBody OrderDTO.AddItemRequest request,
+            HttpServletRequest httpRequest) {
+
+        // ✅ Verify browser is paired (optional - for safety)
+        BrowserContext context = BrowserTokenFilter.getContext(httpRequest);
+        if (context == null || !context.isPaired()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "No terminal is paired"));
+        }
+
         OrderDTO.OrderResponse response = orderService.addItem(request);
         return ResponseEntity.ok(response);
     }
@@ -45,16 +89,10 @@ public class OrderController {
     /**
      * Update item quantity (increment)
      * PUT /api/orders/items
-     *
-     * ملاحظة:
-     * - request.quantity هنا تمثل مقدار الزيادة (delta) على الكمية الحالية.
-     * - الحذف يتم عبر DELETE /api/orders/items/{itemId}
      */
     @PutMapping("/items")
     public ResponseEntity<OrderDTO.OrderResponse> updateItemQuantity(
             @Valid @RequestBody OrderDTO.UpdateItemRequest request) {
-
-        // المنطق كله في السيرفس: يتحقق من أن الكمية > 0 ويعمل increment
         OrderDTO.OrderResponse response = orderService.updateItemQuantity(request);
         return ResponseEntity.ok(response);
     }
@@ -86,8 +124,25 @@ public class OrderController {
      * POST /api/orders/payments (alias)
      */
     @PostMapping({"/payment", "/payments"})
-    public ResponseEntity<OrderDTO.OrderResponse> processPayment(
-            @Valid @RequestBody OrderDTO.PaymentRequest request) {
+    public ResponseEntity<?> processPayment(
+            @Valid @RequestBody OrderDTO.PaymentRequest request,
+            HttpServletRequest httpRequest) {
+
+        // ✅ Verify browser is paired
+        BrowserContext context = BrowserTokenFilter.getContext(httpRequest);
+        if (context == null || !context.isPaired()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "No terminal is paired"));
+        }
+
+        // ✅ READ ONLY - must have open session
+        Session session = lifecycleService.getCurrentSession(context.getTerminalId());
+
+        if (session == null || !Session.SessionStatus.OPEN.equals(session.getStatus())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "No open session. Please start a session first."));
+        }
+
         OrderDTO.OrderResponse response = orderService.processPayment(request);
         return ResponseEntity.ok(response);
     }
@@ -122,16 +177,21 @@ public class OrderController {
         return ResponseEntity.ok(response);
     }
 
-
-
-
-    @PutMapping("/{id}/hold")  // 🔥 غير من POST لـ PUT
+    /**
+     * Hold order
+     * PUT /api/orders/{id}/hold
+     */
+    @PutMapping("/{id}/hold")
     public ResponseEntity<OrderDTO.OrderResponse> holdOrder(@PathVariable Long id) {
         OrderDTO.OrderResponse response = orderService.holdOrder(id);
         return ResponseEntity.ok(response);
     }
 
-    @PutMapping("/{id}/retrieve")  // 🔥 غير من POST لـ PUT
+    /**
+     * Retrieve held order
+     * PUT /api/orders/{id}/retrieve
+     */
+    @PutMapping("/{id}/retrieve")
     public ResponseEntity<OrderDTO.OrderResponse> retrieveOrder(@PathVariable Long id) {
         OrderDTO.OrderResponse response = orderService.retrieveOrder(id);
         return ResponseEntity.ok(response);

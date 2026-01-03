@@ -57,7 +57,6 @@ public class SessionServiceImpl implements SessionService {
         sessions = sessions.stream()
                 .filter(session -> {
                     try {
-                        // ✅ Lazy load user
                         User user = session.getUser();
 
                         if (user == null) {
@@ -105,21 +104,30 @@ public class SessionServiceImpl implements SessionService {
         Session session = sessionRepository.findByIdWithUser(sessionId)
                 .orElseThrow(() -> new RuntimeException("Session not found with id: " + sessionId));
 
-        // ✅ Lazy load user
         User user = session.getUser();
-        if (user == null) {
-            throw new RuntimeException("User not found for session: " + sessionId);
-        }
+        CashierDetailsDTO.CashierInfo cashierInfo;
 
-        CashierDetailsDTO.CashierInfo cashierInfo = CashierDetailsDTO.CashierInfo.builder()
-                .cashierId(user.getId())
-                .name((user.getFirstName() != null ? user.getFirstName() : "") + " " +
-                        (user.getLastName() != null ? user.getLastName() : ""))
-                .email(user.getEmail())
-                .phone(user.getPhone())
-                .role(user.getRole() != null ? user.getRole().name() : "CASHIER")
-                .active(user.getIsActive())
-                .build();
+        if (user == null) {
+            log.warn("User is null for session {}. Creating default cashier info.", sessionId);
+            cashierInfo = CashierDetailsDTO.CashierInfo.builder()
+                    .cashierId(null)
+                    .name("Unknown Cashier")
+                    .email(null)
+                    .phone(null)
+                    .role("CASHIER")
+                    .active(false)
+                    .build();
+        } else {
+            cashierInfo = CashierDetailsDTO.CashierInfo.builder()
+                    .cashierId(user.getId())
+                    .name((user.getFirstName() != null ? user.getFirstName() : "") + " " +
+                            (user.getLastName() != null ? user.getLastName() : ""))
+                    .email(user.getEmail())
+                    .phone(user.getPhone())
+                    .role(user.getRole() != null ? user.getRole().name() : "CASHIER")
+                    .active(user.getIsActive())
+                    .build();
+        }
 
         CashierDetailsDTO.SessionInfo sessionInfo = CashierDetailsDTO.SessionInfo.builder()
                 .sessionId(session.getId())
@@ -171,38 +179,44 @@ public class SessionServiceImpl implements SessionService {
     public SessionCardDTO closeSession(Long sessionId, CloseSessionRequest request) {
         log.info("Closing session {} with closing amount: {}", sessionId, request.getClosingAmount());
 
-        // Find session
         Session session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Session not found with id: " + sessionId));
 
-        // Check if session is already closed
-        if (session.getStatus() == Session.SessionStatus.CLOSED) {
+        if ("CLOSED".equals(session.getStatus())) {
             throw new BusinessRuleException("Session is already closed");
         }
 
-        // Update session status to CLOSED
-        session.setStatus(Session.SessionStatus.CLOSED);
-
-        // Set closedAt = now
+        session.setStatus("CLOSED");
         session.setClosedAt(LocalDateTime.now());
 
-        // Optionally save closingAmount if provided
         if (request.getClosingAmount() != null) {
             session.setClosingAmount(request.getClosingAmount());
         }
 
-        // Save session
         sessionRepository.save(session);
 
         log.info("Session {} closed successfully", sessionId);
 
-        // Return updated session as DTO
         return mapToSessionCardDTO(session);
+    }
+
+    // ✅ Helper methods for date parsing
+    private LocalDateTime parseStartDate(LocalDate date) {
+        if (date == null) {
+            return null;
+        }
+        return date.atStartOfDay();  // 00:00:00
+    }
+
+    private LocalDateTime parseEndDate(LocalDate date) {
+        if (date == null) {
+            return null;
+        }
+        return date.atTime(LocalTime.MAX);  // 23:59:59.999999999
     }
 
     private SessionCardDTO mapToSessionCardDTO(Session session) {
         try {
-            // ✅ Lazy load user
             User user = session.getUser();
             if (user == null) {
                 log.warn("User is null for session {}", session.getId());
@@ -219,7 +233,7 @@ public class SessionServiceImpl implements SessionService {
                     .email(user.getEmail())
                     .sessionId(session.getId())
                     .openedAt(session.getOpenedAt())
-                    .status(session.getStatus() != null ? session.getStatus().name() : "UNKNOWN")
+                    .status(session.getStatus() != null ? session.getStatus() : "UNKNOWN")
                     .ordersCount(ordersCount)
                     .totalSales(totalSales)
                     .build();
@@ -227,13 +241,5 @@ public class SessionServiceImpl implements SessionService {
             log.error("Error mapping session {} to DTO: {}", session.getId(), e.getMessage());
             return null;
         }
-    }
-
-    private LocalDateTime parseStartDate(LocalDate date) {
-        return date != null ? date.atStartOfDay() : null;
-    }
-
-    private LocalDateTime parseEndDate(LocalDate date) {
-        return date != null ? date.atTime(LocalTime.MAX) : null;
     }
 }

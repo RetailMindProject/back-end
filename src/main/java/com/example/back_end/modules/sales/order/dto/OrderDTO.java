@@ -22,7 +22,6 @@ public class OrderDTO {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class CreateRequest {
-        @NotNull(message = "Session ID is required")
         private Long sessionId;
     }
 
@@ -49,30 +48,22 @@ public class OrderDTO {
     }
 
     /**
- * Request to update item quantity (delta)
- *
- * quantity هنا تمثل مقدار التغيير (delta) على الكمية الحالية:
- *  - قيمة موجبة  → زيادة
- *  - قيمة سالبة  → إنقاص
- *  - صفر        → غير مسموح (ما له معنى)
- */
+     * Request to update item quantity (delta)
+     */
     @Data
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-      public static class UpdateItemRequest {
-
-       @NotNull(message = "Order ID is required")
+    public static class UpdateItemRequest {
+        @NotNull(message = "Order ID is required")
         private Long orderId;
 
         @NotNull(message = "Product ID is required")
         private Long productId;
 
         @NotNull(message = "Quantity is required")
-       // 🔴 انتبه: شلّنا @DecimalMin هنا عشان نسمح بالقيم السالبة
         private BigDecimal quantity;
     }
-
 
     /**
      * Request to apply discount to order
@@ -106,16 +97,10 @@ public class OrderDTO {
         private Long orderId;
 
         @NotNull(message = "Payment method is required")
-        private String paymentMethod;  // CASH, CARD, SPLIT
+        private String paymentMethod;
 
-        // Amount is required for CASH or CARD, not for SPLIT
-        // Validation is done in service layer
         private BigDecimal amount;
-
-        // For split payments (required when paymentMethod = SPLIT)
-        // Validation is done in service layer
         private BigDecimal cashAmount;
-
         private BigDecimal cardAmount;
     }
 
@@ -133,11 +118,9 @@ public class OrderDTO {
         private BigDecimal quantity;
         private BigDecimal discountAmount;
         private BigDecimal lineTotal;
-        
-        // Offer information
         private Long offerId;
         private String offerTitle;
-        private BigDecimal originalLineTotal; // Total before discount
+        private BigDecimal originalLineTotal;
     }
 
     /**
@@ -166,30 +149,19 @@ public class OrderDTO {
         private String orderNumber;
         private Long sessionId;
         private String status;
-
-        // Customer info
         private String customerName;
         private String customerPhone;
-
-        // Items
         private List<OrderItemResponse> items;
         private Integer itemCount;
-
-        // Totals
         private BigDecimal subtotal;
         private BigDecimal discountAmount;
         private BigDecimal taxAmount;
         private BigDecimal grandTotal;
-
-        // Payment
         private List<PaymentResponse> payments;
         private BigDecimal amountPaid;
         private BigDecimal changeAmount;
-
-        // Timestamps
         private LocalDateTime createdAt;
         private LocalDateTime paidAt;
-
         private String notes;
     }
 

@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -29,6 +30,7 @@ public class TerminalOperationService {
     private final TerminalRepository terminalRepository;
     private final SessionRepository sessionRepository;
     private final UserRepository userRepository;
+    private static final BigDecimal DEFAULT_OPENING_FLOAT = new BigDecimal("2000.00");
 
     /**
      * Get all available terminals for selection
@@ -51,6 +53,24 @@ public class TerminalOperationService {
         }).collect(Collectors.toList());
     }
 
+    /**
+     * Get terminal by ID
+     */
+    @Transactional(readOnly = true)
+    public TerminalDTO.TerminalInfo getTerminalById(Long id) {
+        Terminal terminal = terminalRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Terminal not found with id: " + id));
+
+        Optional<Session> activeSession = sessionRepository.findOpenSessionByTerminalId(terminal.getId());
+
+        return TerminalDTO.TerminalInfo.builder()
+                .id(terminal.getId())
+                .code(terminal.getCode())
+                .description(terminal.getDescription())
+                .isActive(terminal.getIsActive())
+                .hasActiveSession(activeSession.isPresent())
+                .build();
+    }
 
     /**
      * Get last session closing amount for cashier
@@ -58,16 +78,13 @@ public class TerminalOperationService {
      */
     @Transactional(readOnly = true)
     public TerminalDTO.LastSessionInfo getLastSessionInfo(Long userId) {
-        // Get last closed session for this user
         List<Session> userSessions = sessionRepository.findByUserIdOrderByOpenedAtDesc(userId);
 
-        // Find the last CLOSED session
         Optional<Session> lastClosedSession = userSessions.stream()
-                .filter(s -> s.getStatus() == Session.SessionStatus.CLOSED)
+                .filter(s -> "CLOSED".equals(s.getStatus()))
                 .findFirst();
 
         if (lastClosedSession.isEmpty()) {
-            // First time for this cashier
             return TerminalDTO.LastSessionInfo.builder()
                     .message("No previous session found. This is your first session.")
                     .build();
@@ -86,11 +103,12 @@ public class TerminalOperationService {
 
     /**
      * Open a new cashier session on selected terminal
-     * Validates: terminal exists, terminal active, no existing session on terminal, no existing session for user
+     * @deprecated Session now opens automatically on terminal pairing
      */
+    @Deprecated
     @Transactional
     public TerminalDTO.SessionResponse openSession(TerminalDTO.OpenSessionRequest request) {
-        // Validate terminal
+
         Terminal terminal = terminalRepository.findById(request.getTerminalId())
                 .orElseThrow(() -> new ResourceNotFoundException("Terminal not found with id: " + request.getTerminalId()));
 
@@ -98,29 +116,34 @@ public class TerminalOperationService {
             throw new BusinessRuleException("Cannot open session on inactive terminal");
         }
 
-        // Check if terminal already has active session
-        Optional<Session> existingTerminalSession = sessionRepository.findOpenSessionByTerminalId(request.getTerminalId());
+        // ✅ Check OPEN session on THIS terminal only
+        Optional<Session> existingTerminalSession =
+                sessionRepository.findOpenSessionByTerminalId(request.getTerminalId());
+
         if (existingTerminalSession.isPresent()) {
-            throw new BusinessRuleException("Terminal already has an active session");
+            Session s = existingTerminalSession.get();
+
+            // (Optional) keep session user aligned with current request user
+            if (request.getUserId() != null && (s.getUserId() == null || !request.getUserId().equals(s.getUserId()))) {
+                s.setUserId(request.getUserId());
+                s = sessionRepository.save(s);
+            }
+
+            // (Optional) if openingFloat is null, keep existing; otherwise ignore (openingFloat should not change for open session)
+            return buildSessionResponse(s);
         }
 
-        // Validate user
-        User user = userRepository.findById(request.getUserId().intValue())
+        // ✅ Only validate user exists (no "user has another open session" check)
+        userRepository.findById(request.getUserId().intValue())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + request.getUserId()));
 
-        // Check if user already has active session
-        Optional<Session> existingUserSession = sessionRepository.findOpenSessionByUserId(request.getUserId().intValue());
-        if (existingUserSession.isPresent()) {
-            throw new BusinessRuleException("You already have an active session on another terminal");
-        }
-
-        // Create new session
-        Session session = new Session();
-        session.setTerminal(terminal);
-        session.setUser(user);
-        session.setOpeningFloat(request.getOpeningFloat());
-        session.setOpenedAt(LocalDateTime.now());
-        session.setStatus(Session.SessionStatus.OPEN);
+        Session session = Session.builder()
+                .terminalId(request.getTerminalId())
+                .userId(request.getUserId())
+                .openingFloat(request.getOpeningFloat() != null ? request.getOpeningFloat() : DEFAULT_OPENING_FLOAT)
+                .openedAt(LocalDateTime.now())
+                .status("OPEN")
+                .build();
 
         Session savedSession = sessionRepository.save(session);
 
@@ -129,37 +152,39 @@ public class TerminalOperationService {
 
     /**
      * Close current cashier session
-     * Validates: session exists, session is open, no pending orders
+     * @deprecated Use SessionLifecycleService for session management
      */
+    @Deprecated
     @Transactional
     public TerminalDTO.SessionResponse closeSession(Long userId, TerminalDTO.CloseSessionRequest request) {
-        // Get user's active session
-        Session session = sessionRepository.findOpenSessionByUserId(userId.intValue())
-                .orElseThrow(() -> new ResourceNotFoundException("No active session found for this user"));
 
-        // TODO: Check for pending orders (DRAFT or HELD)
-        // This will be implemented when sales module is complete
+        Session session = sessionRepository.findOpenSessionByTerminalId(request.getTerminalId())
+                .orElseThrow(() -> new ResourceNotFoundException("No active session found for this terminal"));
 
-        // Close session
         session.setClosedAt(LocalDateTime.now());
         session.setClosingAmount(request.getClosingAmount());
-        session.setStatus(Session.SessionStatus.CLOSED);
+        session.setStatus("CLOSED");
 
         Session updatedSession = sessionRepository.save(session);
 
         return buildSessionResponse(updatedSession);
     }
 
+
     /**
      * Get current active session for user
+     * @deprecated Use SessionController endpoints with BrowserContext
      */
+    @Deprecated
     @Transactional(readOnly = true)
-    public TerminalDTO.SessionResponse getCurrentSession(Long userId) {
-        Session session = sessionRepository.findOpenSessionByUserId(userId.intValue())
-                .orElseThrow(() -> new ResourceNotFoundException("No active session found for this user"));
+    public TerminalDTO.SessionResponse getCurrentSession(Long terminalId) {
+
+        Session session = sessionRepository.findOpenSessionByTerminalId(terminalId)
+                .orElseThrow(() -> new ResourceNotFoundException("No active session found for this terminal"));
 
         return buildSessionResponse(session);
     }
+
 
     /**
      * Helper method to build SessionResponse DTO
@@ -167,15 +192,16 @@ public class TerminalOperationService {
     private TerminalDTO.SessionResponse buildSessionResponse(Session session) {
         return TerminalDTO.SessionResponse.builder()
                 .sessionId(session.getId())
-                .terminalId(session.getTerminal().getId())
-                .terminalCode(session.getTerminal().getCode())
-                .userId(session.getUser().getId().longValue())
-                .userName(session.getUser().getFirstName() + " " + session.getUser().getLastName())
+                .terminalId(session.getTerminal() != null ? session.getTerminal().getId() : session.getTerminalId())
+                .terminalCode(session.getTerminal() != null ? session.getTerminal().getCode() : null)
+                .userId(session.getUser() != null ? session.getUser().getId().longValue() : session.getUserId())
+                .userName(session.getUser() != null ?
+                        session.getUser().getFirstName() + " " + session.getUser().getLastName() : null)
                 .openedAt(session.getOpenedAt())
                 .closedAt(session.getClosedAt())
                 .openingFloat(session.getOpeningFloat())
                 .closingAmount(session.getClosingAmount())
-                .status(session.getStatus().name())
+                .status(session.getStatus())  // ← شلت .name() لأن status صار String
                 .build();
     }
 }

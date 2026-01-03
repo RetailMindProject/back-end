@@ -13,38 +13,22 @@ import java.util.Optional;
 public interface SessionRepository extends JpaRepository<Session, Long> {
 
     // ========================================
-    // 🆕 Methods للـ Terminal Operations (مطلوبة!)
+    // ✅ Terminal-based validation (Required)
     // ========================================
 
-    /**
-     * Find open session by terminal ID
-     * Used to check if terminal already has an open session
-     */
-    @Query("SELECT s FROM Session s WHERE s.terminal.id = :terminalId AND s.status = 'OPEN'")
+    @Query("SELECT s FROM Session s WHERE s.terminalId = :terminalId AND s.status = 'OPEN'")
     Optional<Session> findOpenSessionByTerminalId(@Param("terminalId") Long terminalId);
 
-    /**
-     * Find open session by user ID
-     * Used to check if user already has an open session
-     */
-    @Query("SELECT s FROM Session s WHERE s.user.id = :userId AND s.status = 'OPEN'")
-    Optional<Session> findOpenSessionByUserId(@Param("userId") Integer userId);
+    // ========================================
+    // ✅ History / Listing (Allowed)
+    // ========================================
 
-    /**
-     * Find all sessions by user (ordered by date)
-     * Used for session history
-     */
     List<Session> findByUserIdOrderByOpenedAtDesc(Long userId);
 
     // ========================================
-    // ✅ Methods الموجودة عندك (Dashboard)
+    // ✅ Existing Dashboard Queries
     // ========================================
 
-    /**
-     * ✅ Using JPQL (not native SQL)
-     * ✅ No JOIN FETCH to avoid type issues
-     * ✅ Lazy loading will get User when needed
-     */
     @Query("SELECT s FROM Session s ORDER BY s.openedAt DESC")
     List<Session> findAllSessionsOrdered();
 
