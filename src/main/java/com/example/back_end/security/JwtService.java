@@ -27,6 +27,25 @@ public class JwtService {
         return createToken(claims, email);
     }
 
+    /**
+     * Generate token with additional user details for introspection/verification by external services
+     *
+     * @param email User email (used as subject)
+     * @param role User role
+     * @param userId Numeric user ID (for RAG service to match with product data)
+     * @param firstName User first name
+     * @param lastName User last name
+     * @return JWT token
+     */
+    public String generateToken(String email, String role, Integer userId, String firstName, String lastName) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("role", role);
+        claims.put("userId", userId);
+        claims.put("firstName", firstName);
+        claims.put("lastName", lastName);
+        return createToken(claims, email);
+    }
+
     private String createToken(Map<String, Object> claims, String subject) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpiration);
@@ -66,7 +85,7 @@ public class JwtService {
         return extractAllClaims(token).getExpiration();
     }
 
-    private Claims extractAllClaims(String token) {
+    public Claims extractAllClaims(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())
                 .build()

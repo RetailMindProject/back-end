@@ -41,18 +41,24 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // ✅ Public endpoints - NO authentication
                         .requestMatchers("/api/auth/login", "/api/auth/test").permitAll()
+                        // Allow general registration endpoint for staff (still protected by method security)
+                        .requestMatchers("/api/auth/register").permitAll()
                         // Only the initial CEO self-registration is public.
                         .requestMatchers("/api/auth/register/ceo").permitAll()
+                        // Public customer self-registration
+                        .requestMatchers("/api/auth/register/customer").permitAll()
 
                         .requestMatchers("/api/terminal/**").permitAll()
                         .requestMatchers("/api/orders/**").permitAll()
                         .requestMatchers("/api/categories/**").permitAll()
                         .requestMatchers("/api/products/**").permitAll()
+                        // New public API for RAG integration
+                        .requestMatchers("/api/public/**").permitAll()
 
                         .requestMatchers("/api/dashboard/store/**").hasAnyRole("STORE_MANAGER", "CEO")
                         .requestMatchers("/api/dashboard/inventory/**").hasAnyRole("INVENTORY_MANAGER", "CEO")
                         .requestMatchers("/api/forecasting/**").permitAll()
-
+                        .requestMatchers("/api/reco/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

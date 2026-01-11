@@ -34,8 +34,14 @@ public class LoginService {
             // تحديد URL للتوجيه بناءً على الدور
             String redirectUrl = getRedirectUrlByRole(user.getRole());
 
-            // ✅ إنشاء JWT token حقيقي
-            String token = jwtService.generateToken(user.getEmail(), user.getRole());
+            // ✅ إنشاء JWT token حقيقي with user details for introspection
+            String token = jwtService.generateToken(
+                    user.getEmail(),
+                    user.getRole(),
+                    user.getId(),
+                    user.getFirstName(),
+                    user.getLastName()
+            );
 
             log.info("Successful login for user: {} with role: {}", user.getEmail(), user.getRole());
 

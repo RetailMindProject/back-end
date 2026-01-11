@@ -43,10 +43,10 @@ public class RegisterService {
         // Get current authenticated user
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-        // إذا كان التسجيل الذاتي (للـ CEO الأول فقط)
+        // إذا كان التسجيل الذاتي (للـ CEO الأول أو CUSTOMER)
         if (request.getIsSelfRegistration() != null && request.getIsSelfRegistration()) {
-            if (!request.getRole().equals(UserRole.CEO)) {
-                throw new CustomException("Self registration is only allowed for CEO role");
+            if (!request.getRole().equals(UserRole.CEO) && !request.getRole().equals(UserRole.CUSTOMER)) {
+                throw new CustomException("Self registration is only allowed for CEO or CUSTOMER roles");
             }
             return createUser(request);
         }
@@ -111,8 +111,14 @@ public class RegisterService {
         // Save user
         User savedUser = userRepository.save(user);
 
-        // Generate JWT token
-        String token = jwtService.generateToken(savedUser.getEmail(), savedUser.getRole().name());
+        // Generate JWT token with user details for introspection
+        String token = jwtService.generateToken(
+                savedUser.getEmail(),
+                savedUser.getRole().name(),
+                savedUser.getId(),
+                savedUser.getFirstName(),
+                savedUser.getLastName()
+        );
 
         // Return response
         return userMapper.toRegisterResponseDTO(savedUser, token);
