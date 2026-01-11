@@ -145,5 +145,10 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
         LIMIT 1
         """, nativeQuery = true)
     StoreTopProductProjection findMostPopularProduct(@Param("from") LocalDateTime from);
-}
 
+    /**
+     * Return orders for a given original order (orders.parent_order_id = :orderId) where status='RETURNED'.
+     */
+    @Query("SELECT o FROM Order o WHERE o.parentOrderId = :orderId AND o.status = com.example.back_end.modules.sales.order.entity.Order.OrderStatus.RETURNED ORDER BY o.createdAt DESC")
+    List<Order> findReturnOrdersByOriginalOrderId(@Param("orderId") Long orderId);
+}

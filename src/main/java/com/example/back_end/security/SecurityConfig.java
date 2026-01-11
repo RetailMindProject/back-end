@@ -90,6 +90,7 @@ public class SecurityConfig {
 
                         // Public endpoints
                         .requestMatchers("/api/orders/**").permitAll()
+                        .requestMatchers("/api/returns/**").permitAll()
                         .requestMatchers("/api/categories/**").permitAll()
                         .requestMatchers("/api/products/**").permitAll()
                         .requestMatchers("/api/forecasting/**").permitAll()
