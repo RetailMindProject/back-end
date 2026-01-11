@@ -6,6 +6,7 @@ import com.example.back_end.modules.register.dto.RegisterRequestDTO;
 import com.example.back_end.modules.register.dto.RegisterResponseDTO;
 import com.example.back_end.modules.register.dto.UpdateUserRequestDTO;
 import com.example.back_end.modules.register.entity.User;
+import com.example.back_end.modules.register.entity.User.UserRole;
 import com.example.back_end.modules.register.repository.UserRepository;
 import com.example.back_end.modules.register.service.RegisterService;
 import jakarta.validation.Valid;
@@ -48,6 +49,21 @@ public class RegisterController {
             @Valid @RequestBody RegisterRequestDTO request
     ) {
         request.setIsSelfRegistration(false);
+        RegisterResponseDTO response = registerService.register(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * Public customer self registration.
+     * Anonymous users can create a CUSTOMER account.
+     */
+    @PostMapping("/register/customer")
+    public ResponseEntity<RegisterResponseDTO> registerCustomer(
+            @Valid @RequestBody RegisterRequestDTO request
+    ) {
+        request.setIsSelfRegistration(true);
+        // Force role to CUSTOMER to prevent privilege escalation
+        request.setRole(UserRole.CUSTOMER);
         RegisterResponseDTO response = registerService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }

@@ -22,7 +22,7 @@ import java.util.List;
 @RequestMapping("/api/messages")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
-@PreAuthorize("hasAnyRole('CEO', 'STORE_MANAGER', 'INVENTORY_MANAGER')")
+@PreAuthorize("hasAnyRole('CEO', 'STORE_MANAGER', 'INVENTORY_MANAGER','CUSTOMER')")
 public class MessageController {
 
     private final MessageService messageService;
@@ -116,6 +116,8 @@ public class MessageController {
      * جلب عدد الرسائل غير المقروءة للمستخدم الحالي
      */
     @GetMapping("/unread-count")
+    // Allow any authenticated user (including CUSTOMER) to access unread count
+    @PreAuthorize("hasAnyRole('CEO', 'STORE_MANAGER', 'INVENTORY_MANAGER', 'CUSTOMER')")
     public ResponseEntity<UnreadCountDTO> getUnreadCount() {
         UnreadCountDTO unreadCount = messageService.getUnreadCount();
         return ResponseEntity.ok(unreadCount);

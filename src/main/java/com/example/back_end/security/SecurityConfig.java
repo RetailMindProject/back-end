@@ -50,6 +50,8 @@ public class SecurityConfig {
                         // Public endpoints - NO authentication
                         .requestMatchers("/api/auth/login", "/api/auth/test").permitAll()
                         .requestMatchers("/api/auth/register/ceo").permitAll()
+                        // Public customer self-registration
+                        .requestMatchers("/api/auth/register/customer").permitAll()
 
                         // Terminal pairing endpoints (public)
                         .requestMatchers(
@@ -93,12 +95,14 @@ public class SecurityConfig {
                         .requestMatchers("/api/returns/**").permitAll()
                         .requestMatchers("/api/categories/**").permitAll()
                         .requestMatchers("/api/products/**").permitAll()
-                        .requestMatchers("/api/forecasting/**").permitAll()
+                        // New public API for RAG integration
+                        .requestMatchers("/api/public/**").permitAll()
 
                         // Role-based endpoints
                         .requestMatchers("/api/dashboard/store/**").hasAnyRole("STORE_MANAGER", "CEO")
                         .requestMatchers("/api/dashboard/inventory/**").hasAnyRole("INVENTORY_MANAGER", "CEO")
-
+                        .requestMatchers("/api/forecasting/**").permitAll()
+                        .requestMatchers("/api/reco/**").permitAll()
                         .anyRequest().authenticated()
                 );
 
