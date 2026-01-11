@@ -34,6 +34,10 @@ public class Payment {
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal amount;
 
+    @Column(nullable = false, length = 10)
+    @Enumerated(EnumType.STRING)
+    private PaymentType type = PaymentType.PAYMENT;
+
     // ========================================
     // Timestamps
     // ========================================
@@ -78,5 +82,10 @@ public class Payment {
     public enum PaymentMethod {
         CASH,
         CARD
+    }
+
+    public enum PaymentType {
+        PAYMENT,
+        REFUND
     }
 }

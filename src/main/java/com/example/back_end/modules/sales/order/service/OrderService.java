@@ -60,11 +60,14 @@ public class OrderService {
      */
     @Transactional
     public OrderDTO.OrderResponse createOrder(OrderDTO.CreateRequest request) {
-        // Validate session
+        // Validate session - use the session passed from controller (already validated)
         Session session = sessionRepository.findById(request.getSessionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Session not found"));
 
-        if (session.getStatus() != Session.SessionStatus.OPEN) {
+        // Double-check session is open (defensive check) - Session uses String, not enum
+        if (!Session.SessionStatus.OPEN.equals(session.getStatus())) {
+            log.warn("Attempted to create order on closed session {}. Status: {}", 
+                    session.getId(), session.getStatus());
             throw new BusinessRuleException("Cannot create order on closed session");
         }
 
@@ -624,5 +627,18 @@ public class OrderService {
         order.setGrandTotal(grandTotal);
 
         orderRepository.save(order);
+    }
+
+    /**
+     * Expose a global search method used by GET /api/orders/search to fetch order details by order number.
+     */
+    @Transactional(readOnly = true)
+    public OrderDTO.OrderResponse searchByOrderNumber(String orderNumber) {
+        Order order = orderRepository.findByOrderNumber(orderNumber)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+
+        List<OrderItem> items = orderItemRepository.findByOrderId(order.getId());
+        List<Payment> payments = paymentRepository.findByOrderId(order.getId());
+        return orderMapper.toOrderResponse(order, items, payments);
     }
 }

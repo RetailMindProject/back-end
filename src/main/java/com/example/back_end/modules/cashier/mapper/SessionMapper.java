@@ -1,4 +1,5 @@
 package com.example.back_end.modules.cashier.mapper;
+
 import com.example.back_end.modules.cashier.dto.CashierDetailsDTO;
 import com.example.back_end.modules.cashier.dto.SessionCardDTO;
 import com.example.back_end.modules.register.entity.User;
@@ -24,7 +25,7 @@ public class SessionMapper {
                 .email(user.getEmail())
                 .sessionId(session.getId())
                 .openedAt(session.getOpenedAt())
-                .status(session.getStatus().name())
+                .status(session.getStatus())  // ← شلت .name()
                 .ordersCount(ordersCount)
                 .totalSales(totalSales)
                 .build();
