@@ -66,10 +66,26 @@ public class Order {
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
 
-
-
+    /**
+     * Legacy scalar column kept for compatibility with existing code/DB.
+     * Prefer using parentOrder association when working with returns.
+     */
     @Column(name = "parent_order_id")
     private Long parentOrderId;
+
+    /**
+     * Return orders are linked to the original order via orders.parent_order_id.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_order_id", insertable = false, updatable = false)
+    private Order parentOrder;
+
+    /**
+     * Customer is auto-copied from the original order during return flow.
+     * This project doesn't currently have a Customer entity, so we map as read-only id.
+     */
+    @Column(name = "customer_id")
+    private Long customerId;
 
     // ========================================
     // Relationships
@@ -118,6 +134,7 @@ public class Order {
         HOLD,       // Saved for later
         PAID,       // Payment completed
         CANCELLED,  // Cancelled/voided
-        RETURNED    // Returned/refunded
+        RETURNED,   // Returned/refunded
+        PARTIALLY_RETURNED // Some items returned
     }
 }

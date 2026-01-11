@@ -6,6 +6,8 @@ import com.example.back_end.modules.cashier.entity.Session;
 import com.example.back_end.modules.cashier.service.SessionLifecycleService;
 import com.example.back_end.modules.sales.order.dto.OrderDTO;
 import com.example.back_end.modules.sales.order.service.OrderService;
+import com.example.back_end.modules.sales.returns.dto.ReturnHistoryDTO;
+import com.example.back_end.modules.sales.returns.service.ReturnHistoryService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +30,7 @@ public class OrderController {
 
     private final OrderService orderService;
     private final SessionLifecycleService lifecycleService;
+    private final ReturnHistoryService returnHistoryService;
 
     /**
      * Create new order
@@ -206,4 +209,58 @@ public class OrderController {
         orderService.voidOrder(id);
         return ResponseEntity.noContent().build();
     }
+
+    /**
+     * Global search by order number (across all sessions/terminals)
+     * GET /api/orders/search?orderNumber=...
+     */
+    @GetMapping("/search")
+    public ResponseEntity<?> searchByOrderNumber(@RequestParam String orderNumber, HttpServletRequest httpRequest) {
+        try {
+            BrowserContext context = BrowserTokenFilter.getContext(httpRequest);
+
+            if (context == null || !context.isPaired()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "No terminal is paired with this browser"));
+            }
+
+            Session session = lifecycleService.getCurrentSession(context.getTerminalId());
+            if (session == null || !Session.SessionStatus.OPEN.equals(session.getStatus())) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "No open session. Please start a session first."));
+            }
+
+            OrderService svc = this.orderService;
+            return ResponseEntity.ok(svc.searchByOrderNumber(orderNumber));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * B) List all return orders for a specific original order.
+     * GET /api/orders/{orderId}/returns
+     */
+    @GetMapping("/{orderId}/returns")
+    public ResponseEntity<List<ReturnHistoryDTO.ReturnOrderSummary>> listReturnsForOrder(
+            @PathVariable Long orderId,
+            HttpServletRequest httpRequest) {
+
+        // Keep same enforcement pattern as other order endpoints: paired browser + open session.
+        BrowserContext context = BrowserTokenFilter.getContext(httpRequest);
+        if (context == null || !context.isPaired()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(List.of());
+        }
+
+        Session session = lifecycleService.getCurrentSession(context.getTerminalId());
+        if (session == null || !Session.SessionStatus.OPEN.equals(session.getStatus())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(List.of());
+        }
+
+        return ResponseEntity.ok(returnHistoryService.listReturnsForOrder(orderId));
+    }
 }
+

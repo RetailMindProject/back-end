@@ -628,4 +628,17 @@ public class OrderService {
 
         orderRepository.save(order);
     }
+
+    /**
+     * Expose a global search method used by GET /api/orders/search to fetch order details by order number.
+     */
+    @Transactional(readOnly = true)
+    public OrderDTO.OrderResponse searchByOrderNumber(String orderNumber) {
+        Order order = orderRepository.findByOrderNumber(orderNumber)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+
+        List<OrderItem> items = orderItemRepository.findByOrderId(order.getId());
+        List<Payment> payments = paymentRepository.findByOrderId(order.getId());
+        return orderMapper.toOrderResponse(order, items, payments);
+    }
 }
