@@ -1,7 +1,7 @@
-package com.example.back_end.modules.recommendation.controller;
+package com.example.back_end.modules.customer.controller;
 
-import com.example.back_end.modules.recommendation.dto.RecommendationsResponseDTO;
-import com.example.back_end.modules.recommendation.service.RecommendationsGatewayService;
+import com.example.back_end.modules.customer.dto.CustomerOrdersResponseDTO;
+import com.example.back_end.modules.sales.order.service.OrderService;
 import com.example.back_end.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,42 +13,98 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.Map;
+
+/**
+ * Controller for customer-facing order operations.
+ * Customers can view their own order history.
+ */
 @RestController
-@RequestMapping("/api/recommendations")
+@RequestMapping("/api/customers/me")
 @RequiredArgsConstructor
 @Slf4j
-public class RecommendationsGatewayController {
+@CrossOrigin(origins = "*")
+public class CustomerOrderController {
 
-    private final RecommendationsGatewayService recommendationsGatewayService;
+    private final OrderService orderService;
     private final JwtService jwtService;
 
-    @GetMapping("/customers/me")
+    /**
+     * Get authenticated customer's order history.
+     *
+     * GET /api/customers/me/orders?limit=50&since=2025-01-01T00:00:00.000Z
+     *
+     * @param limit Maximum number of orders to return (1-100, default 50)
+     * @param since Optional ISO 8601 datetime to filter orders created after this time
+     * @param authorizationHeader Authorization header containing JWT token
+     * @param authentication Spring Security Authentication object
+     * @return List of customer's orders with items
+     */
+    @GetMapping("/orders")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<RecommendationsResponseDTO> getRecommendationsForCurrentCustomer(
-            @RequestParam(name = "topK", defaultValue = "10") int topK,
-            @RequestParam(name = "candidateLimit", defaultValue = "500") int candidateLimit,
-            @RequestParam(name = "inStockOnly", defaultValue = "true") boolean inStockOnly,
-            @RequestHeader(name = "Authorization", required = false) String authorizationHeader
+    public ResponseEntity<?> getMyOrders(
+            @RequestParam(defaultValue = "50") int limit,
+            @RequestParam(required = false) String since,
+            @RequestHeader(name = "Authorization", required = false) String authorizationHeader,
+            Authentication authentication
     ) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Long customerId = extractCustomerId(authentication, authorizationHeader);
+        try {
+            // Extract customerId (userId) from JWT
+            Long userId = extractCustomerId(authentication, authorizationHeader);
+            log.info("Fetching orders for customer userId: {}", userId);
 
-        int safeTopK = Math.min(Math.max(topK, 1), 100);
-        int safeCandidateLimit = Math.min(Math.max(candidateLimit, 1), 2000);
+            // Validate and clamp limit to safe range
+            int safeLimit = Math.min(Math.max(limit, 1), 100);
 
-        String bearerToken = resolveBearerToken(authorizationHeader, authentication);
+            // Parse since date if provided
+            LocalDateTime sinceDate = null;
+            if (StringUtils.hasText(since)) {
+                try {
+                    sinceDate = LocalDateTime.parse(since, DateTimeFormatter.ISO_DATE_TIME);
+                    log.debug("Filtering orders since: {}", sinceDate);
+                } catch (DateTimeParseException e) {
+                    log.warn("Invalid since date format: {}", since);
+                    return ResponseEntity.badRequest()
+                            .body(Map.of(
+                                    "status", 400,
+                                    "message", "Invalid date format for 'since' parameter. Use ISO 8601 format (e.g., 2025-01-01T00:00:00.000Z)",
+                                    "timestamp", LocalDateTime.now().toString()
+                            ));
+                }
+            }
 
-        RecommendationsResponseDTO body = recommendationsGatewayService
-                .getRecommendations(customerId, bearerToken, safeTopK, safeCandidateLimit, inStockOnly);
+            // Fetch orders for this customer
+            CustomerOrdersResponseDTO orders = orderService.getCustomerOrders(userId, safeLimit, sinceDate);
 
-        return ResponseEntity.ok(body);
+            log.info("Returning {} orders for customer userId: {}", orders.getOrders().size(), userId);
+            return ResponseEntity.ok(orders);
+
+        } catch (IllegalStateException e) {
+            log.error("Customer ID extraction failed: {}", e.getMessage());
+            return ResponseEntity.status(401)
+                    .body(Map.of(
+                            "status", 401,
+                            "message", "Unauthorized - " + e.getMessage(),
+                            "timestamp", LocalDateTime.now().toString()
+                    ));
+        } catch (Exception e) {
+            log.error("Error fetching customer orders", e);
+            return ResponseEntity.status(500)
+                    .body(Map.of(
+                            "status", 500,
+                            "message", "Internal server error: " + e.getMessage(),
+                            "timestamp", LocalDateTime.now().toString()
+                    ));
+        }
     }
 
     /**
      * Extract customerId/userId from authentication.
-     * Supports both:
-     * 1. Jwt principal (future OAuth2 setup)
-     * 2. UsernamePasswordAuthenticationToken with email principal (current custom filter setup)
+     * Supports both Jwt principal and UsernamePasswordAuthenticationToken.
+     * Same logic as RecommendationsGatewayController.
      *
      * @param authentication Spring Security Authentication object
      * @param authorizationHeader Authorization header value (e.g., "Bearer <token>")
@@ -135,17 +191,6 @@ public class RecommendationsGatewayController {
         }
         log.warn("userId claim has unsupported type: {}", value.getClass().getCanonicalName());
         return null;
-    }
-
-    private String resolveBearerToken(String authorizationHeader, Authentication authentication) {
-        if (StringUtils.hasText(authorizationHeader) && authorizationHeader.startsWith("Bearer ")) {
-            return authorizationHeader;
-        }
-        if (authentication != null && authentication.getCredentials() instanceof String token) {
-            return "Bearer " + token;
-        }
-        log.warn("Authorization header is missing; forwarding call without token may fail in downstream service");
-        return "";
     }
 }
 

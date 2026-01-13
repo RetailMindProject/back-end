@@ -60,12 +60,45 @@ public class RecommendationsGatewayService {
     }
 
     private RecommendationsResponseDTO mapToFrontend(Long customerId, RecommendationServiceResponse serviceResponse) {
+        // Logging for debugging empty recommendations
+        log.info("=== Recommendation Service Response for customer {} ===", customerId);
+        log.info("Status: {}", serviceResponse.getStatus());
+
+        RecommendationServiceRows serviceRows = serviceResponse.getRows();
+        if (serviceRows != null) {
+            int forYouCount = serviceRows.getForYou() != null ? serviceRows.getForYou().size() : 0;
+            int popularCount = serviceRows.getPopular() != null ? serviceRows.getPopular().size() : 0;
+            int offersCount = serviceRows.getOffers() != null ? serviceRows.getOffers().size() : 0;
+
+            log.info("Rows - For You: {}, Popular: {}, Offers: {}", forYouCount, popularCount, offersCount);
+
+            if (serviceRows.getForYou() != null && serviceRows.getForYou().isEmpty()) {
+                log.warn("⚠️  WARNING: for_you array is EMPTY for customer {}", customerId);
+            }
+        } else {
+            log.warn("⚠️  WARNING: serviceRows is NULL for customer {}", customerId);
+        }
+
+        RecommendationServiceMeta serviceMeta = serviceResponse.getMeta();
+        if (serviceMeta != null) {
+            log.info("Meta - Cold Start: {}, Stale: {}, User Segment: {}",
+                     serviceMeta.getIsColdStart(),
+                     serviceMeta.getIsStale(),
+                     serviceMeta.getUserSegment());
+            log.info("Meta - Counts - For You: {}, Popular: {}, Offers: {}",
+                     serviceMeta.getNumForYou(),
+                     serviceMeta.getNumPopular(),
+                     serviceMeta.getNumOffers());
+        } else {
+            log.warn("⚠️  WARNING: serviceMeta is NULL for customer {}", customerId);
+        }
+        log.info("=== End of Recommendation Service Response ===");
+
         RecommendationsResponseDTO dto = new RecommendationsResponseDTO();
         dto.setStatus(serviceResponse.getStatus());
         dto.setUserId(customerId);
 
         RecommendationRowsDTO rows = new RecommendationRowsDTO();
-        RecommendationServiceRows serviceRows = serviceResponse.getRows();
         if (serviceRows != null) {
             rows.setForYou(mapItems(serviceRows.getForYou()));
             rows.setPopular(mapItems(serviceRows.getPopular()));
@@ -78,7 +111,6 @@ public class RecommendationsGatewayService {
         dto.setRows(rows);
 
         RecommendationMetaDTO meta = new RecommendationMetaDTO();
-        RecommendationServiceMeta serviceMeta = serviceResponse.getMeta();
         if (serviceMeta != null) {
             meta.setTopK(serviceMeta.getTopK());
             meta.setNumForYou(serviceMeta.getNumForYou());

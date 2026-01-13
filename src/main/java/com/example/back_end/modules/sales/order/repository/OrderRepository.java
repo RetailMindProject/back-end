@@ -2,6 +2,7 @@ package com.example.back_end.modules.sales.order.repository;
 
 import com.example.back_end.modules.sales.order.entity.Order;
 import com.example.back_end.modules.dashboard.storedashboard.projection.*;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -151,4 +152,29 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
      */
     @Query("SELECT o FROM Order o WHERE o.parentOrderId = :orderId AND o.status = com.example.back_end.modules.sales.order.entity.Order.OrderStatus.RETURNED ORDER BY o.createdAt DESC")
     List<Order> findReturnOrdersByOriginalOrderId(@Param("orderId") Long orderId);
+
+    /**
+     * Find orders for a customer (by customer.id from customers table).
+     * Used for customer order history.
+     */
+    @Query("SELECT o FROM Order o WHERE o.customerId = :customerId ORDER BY o.createdAt DESC")
+    List<Order> findByCustomerId(@Param("customerId") Integer customerId, Pageable pageable);
+
+    /**
+     * Find orders for a customer created after a specific date.
+     */
+    @Query("SELECT o FROM Order o WHERE o.customerId = :customerId AND o.createdAt >= :since ORDER BY o.createdAt DESC")
+    List<Order> findByCustomerIdAndCreatedAtAfter(@Param("customerId") Integer customerId, @Param("since") LocalDateTime since, Pageable pageable);
+
+    /**
+     * Count total orders for a customer.
+     */
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.customerId = :customerId")
+    Long countByCustomerId(@Param("customerId") Integer customerId);
+
+    /**
+     * Count orders for a customer created after a specific date.
+     */
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.customerId = :customerId AND o.createdAt >= :since")
+    Long countByCustomerIdAndCreatedAtAfter(@Param("customerId") Integer customerId, @Param("since") LocalDateTime since);
 }
