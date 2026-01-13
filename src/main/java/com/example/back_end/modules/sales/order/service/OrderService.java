@@ -6,6 +6,7 @@ import com.example.back_end.modules.cashier.entity.Session;
 import com.example.back_end.modules.cashier.repository.SessionRepository;
 import com.example.back_end.modules.catalog.product.entity.Product;
 import com.example.back_end.modules.catalog.product.repository.ProductRepository;
+import com.example.back_end.modules.customer.dto.CustomerOrdersResponseDTO;
 import com.example.back_end.modules.offer.dto.OfferApplicationResult;
 import com.example.back_end.modules.offer.entity.Offer;
 import com.example.back_end.modules.offer.service.BundleOfferService;
@@ -13,6 +14,8 @@ import com.example.back_end.modules.offer.dto.BundleApplicationResult;
 import com.example.back_end.modules.offer.service.CategoryOfferService;
 import com.example.back_end.modules.offer.service.OfferEngine;
 import com.example.back_end.modules.offer.service.ProductOfferService;
+import com.example.back_end.modules.register.entity.Customer;
+import com.example.back_end.modules.register.repository.CustomerRepository;
 import com.example.back_end.modules.sales.order.dto.OrderDTO;
 import com.example.back_end.modules.sales.order.entity.Order;
 import com.example.back_end.modules.sales.order.entity.OrderItem;
@@ -23,6 +26,9 @@ import com.example.back_end.modules.sales.payment.entity.Payment;
 import com.example.back_end.modules.sales.payment.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +36,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Service for POS order operations
@@ -49,6 +56,7 @@ public class OrderService {
     private final PaymentRepository paymentRepository;
     private final SessionRepository sessionRepository;
     private final ProductRepository productRepository;
+    private final CustomerRepository customerRepository;
     private final OrderMapper orderMapper;
     private final ProductOfferService productOfferService;
     private final CategoryOfferService categoryOfferService;
@@ -412,6 +420,101 @@ public class OrderService {
         orderRepository.delete(order);
     }
 
+    /**
+     * Get customer order history.
+     * Fetches orders for a customer by their userId from JWT.
+     *
+     * @param userId User ID from JWT token (links to customer.user_id)
+     * @param limit Maximum number of orders to return
+     * @param since Optional filter to get orders after this date
+     * @return Customer orders response with items
+     */
+    @Transactional(readOnly = true)
+    public CustomerOrdersResponseDTO getCustomerOrders(Long userId, int limit, LocalDateTime since) {
+        log.debug("Fetching orders for userId: {}, limit: {}, since: {}", userId, limit, since);
+
+        // Find customer by user_id
+        Customer customer = customerRepository.findByUserId(userId.intValue())
+                .orElseThrow(() -> new ResourceNotFoundException("Customer not found for userId: " + userId));
+
+        log.debug("Found customer id: {} for userId: {}", customer.getId(), userId);
+
+        // Build query based on since parameter
+        List<Order> orders;
+        if (since != null) {
+            Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"));
+            orders = orderRepository.findByCustomerIdAndCreatedAtAfter(customer.getId(), since, pageable);
+        } else {
+            Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"));
+            orders = orderRepository.findByCustomerId(customer.getId(), pageable);
+        }
+
+        log.debug("Found {} orders for customer id: {}", orders.size(), customer.getId());
+
+        // Map orders to DTO
+        List<CustomerOrdersResponseDTO.CustomerOrderDTO> orderDTOs = orders.stream()
+                .map(order -> {
+                    List<OrderItem> items = orderItemRepository.findByOrderId(order.getId());
+                    return mapToCustomerOrderDTO(order, items);
+                })
+                .collect(Collectors.toList());
+
+        // Check if there are more orders (for pagination)
+        long totalCount = since != null
+                ? orderRepository.countByCustomerIdAndCreatedAtAfter(customer.getId(), since)
+                : orderRepository.countByCustomerId(customer.getId());
+
+        boolean hasMore = totalCount > limit;
+
+        return CustomerOrdersResponseDTO.builder()
+                .orders(orderDTOs)
+                .total((int) totalCount)
+                .limit(limit)
+                .hasMore(hasMore)
+                .build();
+    }
+
+    /**
+     * Map Order entity to CustomerOrderDTO.
+     */
+    private CustomerOrdersResponseDTO.CustomerOrderDTO mapToCustomerOrderDTO(Order order, List<OrderItem> items) {
+        List<CustomerOrdersResponseDTO.CustomerOrderItemDTO> itemDTOs = items.stream()
+                .map(item -> {
+                    String productName = "Unknown Product";
+                    Long productId = null;
+
+                    if (item.getProduct() != null) {
+                        productId = item.getProduct().getId();
+                        productName = item.getProduct().getName();
+                    }
+
+                    return CustomerOrdersResponseDTO.CustomerOrderItemDTO.builder()
+                            .id(item.getId())
+                            .productId(productId)
+                            .productName(productName)
+                            .quantity(item.getQuantity())
+                            .unitPrice(item.getUnitPrice())
+                            .lineTotal(item.getLineTotal())
+                            .discountAmount(item.getDiscountAmount())
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        return CustomerOrdersResponseDTO.CustomerOrderDTO.builder()
+                .id(order.getId())
+                .orderNumber(order.getOrderNumber())
+                .status(order.getStatus() != null ? order.getStatus().name() : null)
+                .subtotal(order.getSubtotal())
+                .discountTotal(order.getDiscountTotal())
+                .taxTotal(order.getTaxTotal())
+                .grandTotal(order.getGrandTotal())
+                .itemCount(items.size())
+                .createdAt(order.getCreatedAt())
+                .paidAt(order.getPaidAt())
+                .items(itemDTOs)
+                .build();
+    }
+
     // ========================================
     // Helper Methods
     // ========================================
@@ -630,7 +733,12 @@ public class OrderService {
     }
 
     /**
-     * Expose a global search method used by GET /api/orders/search to fetch order details by order number.
+     * Search order by order number.
+     * Used by GET /api/orders/search to fetch order details by order number.
+     *
+     * @param orderNumber The order number to search for
+     * @return Order details with items and payments
+     * @throws ResourceNotFoundException if order not found
      */
     @Transactional(readOnly = true)
     public OrderDTO.OrderResponse searchByOrderNumber(String orderNumber) {
