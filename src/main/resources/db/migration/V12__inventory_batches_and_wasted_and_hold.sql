@@ -24,10 +24,10 @@ BEGIN
           AND con.contype = 'c'
           AND pg_get_constraintdef(con.oid) ILIKE '%ref_type%'
     LOOP
-        EXECUTE format('ALTER TABLE public.inventory_movements DROP CONSTRAINT IF EXISTS %I', c_name);
+        EXECUTE format('ALTER TABLE  inventory_movements DROP CONSTRAINT IF EXISTS %I', c_name);
     END LOOP;
 
-    ALTER TABLE public.inventory_movements
+    ALTER TABLE  inventory_movements
         ADD CONSTRAINT inventory_movements_ref_type_check
             CHECK (ref_type IN ('PURCHASE','SALE','RETURN','TRANSFER','ADJUSTMENT','WASTED'));
 END $$ LANGUAGE plpgsql;
@@ -51,10 +51,10 @@ BEGIN
           AND con.contype = 'c'
           AND pg_get_constraintdef(con.oid) ILIKE '%status%'
     LOOP
-        EXECUTE format('ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS %I', c_name);
+        EXECUTE format('ALTER TABLE  orders DROP CONSTRAINT IF EXISTS %I', c_name);
     END LOOP;
 
-    ALTER TABLE public.orders
+    ALTER TABLE  orders
         ADD CONSTRAINT orders_status_check
             CHECK (status IN ('DRAFT','PAID','CANCELLED','RETURNED','HOLD'));
 END $$ LANGUAGE plpgsql;
@@ -63,36 +63,36 @@ END $$ LANGUAGE plpgsql;
 -- 3) inventory_batches
 --    id, product_id, expiration_date
 -- -----------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.inventory_batches (
+CREATE TABLE IF NOT EXISTS  inventory_batches (
     id BIGSERIAL PRIMARY KEY,
-    product_id BIGINT NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+    product_id BIGINT NOT NULL REFERENCES  products(id) ON DELETE CASCADE,
     expiration_date DATE,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_inventory_batches_product_id
-    ON public.inventory_batches(product_id);
+    ON  inventory_batches(product_id);
 
 CREATE INDEX IF NOT EXISTS idx_inventory_batches_expiration_date
-    ON public.inventory_batches(expiration_date);
+    ON  inventory_batches(expiration_date);
 
 -- Composite index requested: (product_id, expiration_date)
 CREATE INDEX IF NOT EXISTS idx_inventory_batches_product_exp
-    ON public.inventory_batches(product_id, expiration_date);
+    ON  inventory_batches(product_id, expiration_date);
 
 -- -----------------------------------------------------------------
 -- 4) inventory_movement_batches (intermediate table)
 --    batch_id, inventory_movement_id, qty
 -- -----------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.inventory_movement_batches (
-    batch_id BIGINT NOT NULL REFERENCES public.inventory_batches(id) ON DELETE CASCADE,
-    inventory_movement_id BIGINT NOT NULL REFERENCES public.inventory_movements(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS  inventory_movement_batches (
+    batch_id BIGINT NOT NULL REFERENCES  inventory_batches(id) ON DELETE CASCADE,
+    inventory_movement_id BIGINT NOT NULL REFERENCES  inventory_movements(id) ON DELETE CASCADE,
     qty NUMERIC(10,2) NOT NULL,
     PRIMARY KEY (batch_id, inventory_movement_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_inventory_movement_batches_movement
-    ON public.inventory_movement_batches(inventory_movement_id);
+    ON  inventory_movement_batches(inventory_movement_id);
 
 CREATE INDEX IF NOT EXISTS idx_inventory_movement_batches_batch
-    ON public.inventory_movement_batches(batch_id);
+    ON  inventory_movement_batches(batch_id);
