@@ -11,7 +11,6 @@ import java.util.Optional;
 public interface TerminalRepository extends JpaRepository<Terminal, Long> {
 
     Optional<Terminal> findByCode(String code);
-
     List<Terminal> findByIsActiveTrue();
 
     boolean existsByCode(String code);

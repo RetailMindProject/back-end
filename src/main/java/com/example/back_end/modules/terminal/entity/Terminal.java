@@ -31,4 +31,7 @@ public class Terminal {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "last_seen_at")
+    private LocalDateTime lastSeenAt;
 }

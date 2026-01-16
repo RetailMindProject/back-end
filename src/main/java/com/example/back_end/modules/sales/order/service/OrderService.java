@@ -6,8 +6,16 @@ import com.example.back_end.modules.cashier.entity.Session;
 import com.example.back_end.modules.cashier.repository.SessionRepository;
 import com.example.back_end.modules.catalog.product.entity.Product;
 import com.example.back_end.modules.catalog.product.repository.ProductRepository;
+import com.example.back_end.modules.customer.dto.CustomerOrdersResponseDTO;
+import com.example.back_end.modules.offer.dto.OfferApplicationResult;
 import com.example.back_end.modules.offer.entity.Offer;
+import com.example.back_end.modules.offer.service.BundleOfferService;
+import com.example.back_end.modules.offer.dto.BundleApplicationResult;
+import com.example.back_end.modules.offer.service.CategoryOfferService;
+import com.example.back_end.modules.offer.service.OfferEngine;
 import com.example.back_end.modules.offer.service.ProductOfferService;
+import com.example.back_end.modules.register.entity.Customer;
+import com.example.back_end.modules.register.repository.CustomerRepository;
 import com.example.back_end.modules.sales.order.dto.OrderDTO;
 import com.example.back_end.modules.sales.order.entity.Order;
 import com.example.back_end.modules.sales.order.entity.OrderItem;
@@ -17,21 +25,30 @@ import com.example.back_end.modules.sales.order.repository.OrderRepository;
 import com.example.back_end.modules.sales.payment.entity.Payment;
 import com.example.back_end.modules.sales.payment.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Service for POS order operations
+ * Handles all offer types with proper priority:
+ * 1. BUNDLE offers (highest priority - locks items)
+ * 2. PRODUCT offers (item level)
+ * 3. CATEGORY offers (item level)
+ * 4. ORDER offers (order level)
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OrderService {
 
     private final OrderRepository orderRepository;
@@ -39,19 +56,26 @@ public class OrderService {
     private final PaymentRepository paymentRepository;
     private final SessionRepository sessionRepository;
     private final ProductRepository productRepository;
+    private final CustomerRepository customerRepository;
     private final OrderMapper orderMapper;
     private final ProductOfferService productOfferService;
+    private final CategoryOfferService categoryOfferService;
+    private final BundleOfferService bundleOfferService;
+    private final OfferEngine offerEngine;
 
     /**
      * Create new order
      */
     @Transactional
     public OrderDTO.OrderResponse createOrder(OrderDTO.CreateRequest request) {
-        // Validate session
+        // Validate session - use the session passed from controller (already validated)
         Session session = sessionRepository.findById(request.getSessionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Session not found"));
 
-        if (session.getStatus() != Session.SessionStatus.OPEN) {
+        // Double-check session is open (defensive check) - Session uses String, not enum
+        if (!Session.SessionStatus.OPEN.equals(session.getStatus())) {
+            log.warn("Attempted to create order on closed session {}. Status: {}", 
+                    session.getId(), session.getStatus());
             throw new BusinessRuleException("Cannot create order on closed session");
         }
 
@@ -110,32 +134,25 @@ public class OrderService {
             item.setQuantity(request.getQuantity());
         }
 
-        // Apply PRODUCT offer automatically (if manual discount not provided)
-        if (request.getDiscountAmount() == null || request.getDiscountAmount().compareTo(BigDecimal.ZERO) == 0) {
-            applyProductOffer(item);
-        } else {
-            // Manual discount provided - use it instead of offer
-            item.setLineDiscount(request.getDiscountAmount());
-            item.setOfferId(null);
-        }
+        // Initialize with no discount
+        item.setLineDiscount(BigDecimal.ZERO);
+        item.setOfferId(null);
 
-        // Calculate line total
-        BigDecimal lineDiscount = item.getLineDiscount() != null ? item.getLineDiscount() : BigDecimal.ZERO;
-        BigDecimal taxAmount = item.getTaxAmount() != null ? item.getTaxAmount() : BigDecimal.ZERO;
-
-        BigDecimal lineTotal = item.getUnitPrice()
-                .multiply(item.getQuantity())
-                .subtract(lineDiscount)
-                .add(taxAmount);
-
+        // Calculate initial line total (will be recalculated after offers)
+        BigDecimal lineTotal = item.getUnitPrice().multiply(item.getQuantity());
         item.setLineTotal(lineTotal);
 
         orderItemRepository.save(item);
 
+        // Apply offers to ALL items (checks bundles first!)
+        applyOffersToItems(order);
+
+        // Recalculate totals for all items
+        recalculateItemTotals(order);
+
         // Recalculate order totals
         recalculateOrderTotals(order);
 
-        // Return updated order
         return getOrderById(order.getId());
     }
 
@@ -150,57 +167,45 @@ public class OrderService {
         if (request.getQuantity() == null) {
             throw new BusinessRuleException("Quantity is required");
         }
-    
+
         BigDecimal delta = request.getQuantity();
-    
+
         // لا معنى لـ 0 كـ delta
         if (delta.compareTo(BigDecimal.ZERO) == 0) {
             throw new BusinessRuleException("Quantity change cannot be zero");
         }
-    
+
         // نجيب الـ item باستخدام (orderId + productId)
         OrderItem item = orderItemRepository
                 .findByOrderIdAndProductId(request.getOrderId(), request.getProductId())
                 .orElseThrow(() -> new ResourceNotFoundException("Order item not found for this order and product"));
-    
+
         Order order = item.getOrder();
         if (order.getStatus() == Order.OrderStatus.PAID) {
             throw new BusinessRuleException("Cannot modify paid order");
         }
-    
+
         BigDecimal currentQty = item.getQuantity();
         BigDecimal newQuantity = currentQty.add(delta);
-    
+
         if (newQuantity.compareTo(BigDecimal.ZERO) <= 0) {
             // لو النتيجة صفر أو أقل → نحذف الـ item من الطلب
             orderItemRepository.delete(item);
         } else {
             item.setQuantity(newQuantity);
-            
-            // Re-apply PRODUCT offer when quantity changes (if no manual discount was set)
-            if (item.getOfferId() != null || item.getLineDiscount() == null || item.getLineDiscount().compareTo(BigDecimal.ZERO) == 0) {
-                applyProductOffer(item);
-            }
-    
-            BigDecimal lineDiscount = item.getLineDiscount() != null ? item.getLineDiscount() : BigDecimal.ZERO;
-            BigDecimal taxAmount = item.getTaxAmount() != null ? item.getTaxAmount() : BigDecimal.ZERO;
-    
-            BigDecimal lineTotal = item.getUnitPrice()
-                    .multiply(item.getQuantity())
-                    .subtract(lineDiscount)
-                    .add(taxAmount);
-    
-            item.setLineTotal(lineTotal);
-    
             orderItemRepository.save(item);
         }
-    
-        // Recalculate order totals
+
+        // Re-apply offers (bundle might change!)
+        applyOffersToItems(order);
+
+        // Recalculate totals
+        recalculateItemTotals(order);
         recalculateOrderTotals(order);
-    
+
         return getOrderById(order.getId());
     }
-    
+
     /**
      * Remove item from order
      */
@@ -216,7 +221,11 @@ public class OrderService {
 
         orderItemRepository.delete(item);
 
+        // Re-apply offers (bundle might change!)
+        applyOffersToItems(order);
+
         // Recalculate order totals
+        recalculateItemTotals(order);
         recalculateOrderTotals(order);
 
         return getOrderById(order.getId());
@@ -234,7 +243,7 @@ public class OrderService {
             throw new BusinessRuleException("Cannot modify paid order");
         }
 
-        // Calculate discount
+        // Calculate manual discount
         BigDecimal discountAmount;
         if (request.getDiscountAmount() != null && request.getDiscountAmount().compareTo(BigDecimal.ZERO) > 0) {
             discountAmount = request.getDiscountAmount();
@@ -246,10 +255,21 @@ public class OrderService {
             discountAmount = BigDecimal.ZERO;
         }
 
+        // Set manual discount directly (bypasses ORDER offer)
         order.setDiscountAmount(discountAmount);
 
-        // Recalculate totals
-        recalculateOrderTotals(order);
+        // Recalculate tax and grand total manually (don't call recalculateOrderTotals)
+        BigDecimal taxRate = BigDecimal.valueOf(0.10);
+        BigDecimal taxableAmount = order.getSubtotal().subtract(discountAmount);
+        BigDecimal taxAmount = taxableAmount.multiply(taxRate).setScale(2, RoundingMode.HALF_UP);
+        order.setTaxAmount(taxAmount);
+
+        BigDecimal grandTotal = order.getSubtotal()
+                .subtract(discountAmount)
+                .add(taxAmount);
+        order.setGrandTotal(grandTotal);
+
+        orderRepository.save(order);
 
         return getOrderById(order.getId());
     }
@@ -361,7 +381,7 @@ public class OrderService {
             throw new BusinessRuleException("Cannot hold paid order");
         }
 
-        order.setStatus(Order.OrderStatus.HELD);
+        order.setStatus(Order.OrderStatus.HOLD);
         orderRepository.save(order);
 
         return getOrderById(orderId);
@@ -375,7 +395,7 @@ public class OrderService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
 
-        if (order.getStatus() != Order.OrderStatus.HELD) {
+        if (order.getStatus() != Order.OrderStatus.HOLD) {
             throw new BusinessRuleException("Only held orders can be retrieved");
         }
 
@@ -398,6 +418,101 @@ public class OrderService {
         }
 
         orderRepository.delete(order);
+    }
+
+    /**
+     * Get customer order history.
+     * Fetches orders for a customer by their userId from JWT.
+     *
+     * @param userId User ID from JWT token (links to customer.user_id)
+     * @param limit Maximum number of orders to return
+     * @param since Optional filter to get orders after this date
+     * @return Customer orders response with items
+     */
+    @Transactional(readOnly = true)
+    public CustomerOrdersResponseDTO getCustomerOrders(Long userId, int limit, LocalDateTime since) {
+        log.debug("Fetching orders for userId: {}, limit: {}, since: {}", userId, limit, since);
+
+        // Find customer by user_id
+        Customer customer = customerRepository.findByUserId(userId.intValue())
+                .orElseThrow(() -> new ResourceNotFoundException("Customer not found for userId: " + userId));
+
+        log.debug("Found customer id: {} for userId: {}", customer.getId(), userId);
+
+        // Build query based on since parameter
+        List<Order> orders;
+        if (since != null) {
+            Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"));
+            orders = orderRepository.findByCustomerIdAndCreatedAtAfter(customer.getId(), since, pageable);
+        } else {
+            Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"));
+            orders = orderRepository.findByCustomerId(customer.getId(), pageable);
+        }
+
+        log.debug("Found {} orders for customer id: {}", orders.size(), customer.getId());
+
+        // Map orders to DTO
+        List<CustomerOrdersResponseDTO.CustomerOrderDTO> orderDTOs = orders.stream()
+                .map(order -> {
+                    List<OrderItem> items = orderItemRepository.findByOrderId(order.getId());
+                    return mapToCustomerOrderDTO(order, items);
+                })
+                .collect(Collectors.toList());
+
+        // Check if there are more orders (for pagination)
+        long totalCount = since != null
+                ? orderRepository.countByCustomerIdAndCreatedAtAfter(customer.getId(), since)
+                : orderRepository.countByCustomerId(customer.getId());
+
+        boolean hasMore = totalCount > limit;
+
+        return CustomerOrdersResponseDTO.builder()
+                .orders(orderDTOs)
+                .total((int) totalCount)
+                .limit(limit)
+                .hasMore(hasMore)
+                .build();
+    }
+
+    /**
+     * Map Order entity to CustomerOrderDTO.
+     */
+    private CustomerOrdersResponseDTO.CustomerOrderDTO mapToCustomerOrderDTO(Order order, List<OrderItem> items) {
+        List<CustomerOrdersResponseDTO.CustomerOrderItemDTO> itemDTOs = items.stream()
+                .map(item -> {
+                    String productName = "Unknown Product";
+                    Long productId = null;
+
+                    if (item.getProduct() != null) {
+                        productId = item.getProduct().getId();
+                        productName = item.getProduct().getName();
+                    }
+
+                    return CustomerOrdersResponseDTO.CustomerOrderItemDTO.builder()
+                            .id(item.getId())
+                            .productId(productId)
+                            .productName(productName)
+                            .quantity(item.getQuantity())
+                            .unitPrice(item.getUnitPrice())
+                            .lineTotal(item.getLineTotal())
+                            .discountAmount(item.getDiscountAmount())
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        return CustomerOrdersResponseDTO.CustomerOrderDTO.builder()
+                .id(order.getId())
+                .orderNumber(order.getOrderNumber())
+                .status(order.getStatus() != null ? order.getStatus().name() : null)
+                .subtotal(order.getSubtotal())
+                .discountTotal(order.getDiscountTotal())
+                .taxTotal(order.getTaxTotal())
+                .grandTotal(order.getGrandTotal())
+                .itemCount(items.size())
+                .createdAt(order.getCreatedAt())
+                .paidAt(order.getPaidAt())
+                .items(itemDTOs)
+                .build();
     }
 
     // ========================================
@@ -423,27 +538,194 @@ public class OrderService {
     }
 
     /**
+     * Apply offers to ALL order items
+     *
+     * Priority:
+     * 1. BUNDLE offer (highest) - locks items from other offers
+     * 2. PRODUCT offer
+     * 3. CATEGORY offer
+     *
+     * @param order The order containing items
+     */
+    private void applyOffersToItems(Order order) {
+        List<OrderItem> items = orderItemRepository.findByOrderId(order.getId());
+
+        if (items.isEmpty()) {
+            return;
+        }
+
+        // Step 1: Check for BUNDLE offers (highest priority)
+        BundleApplicationResult bundleResult = // ✅ صح
+                bundleOfferService.detectAndApplyBundles(items);
+
+        Set<Long> itemsInBundle = new HashSet<>();
+
+        if (bundleResult.getBundleApplied()) {
+            // Apply bundle discounts to items
+            Map<Long, BigDecimal> bundleDiscounts = bundleResult.getItemDiscounts();
+
+            for (OrderItem item : items) {
+                if (bundleDiscounts.containsKey(item.getId())) {
+                    // This item is part of bundle
+                    BigDecimal discount = bundleDiscounts.get(item.getId());
+                    item.setOfferId(bundleResult.getOfferId());
+                    item.setLineDiscount(discount);
+                    itemsInBundle.add(item.getId());
+
+                    log.info("Applied BUNDLE discount to item {}: ${}", item.getId(), discount);
+                }
+            }
+        }
+
+        // Step 2: For items NOT in bundle, apply Product/Category offers
+        for (OrderItem item : items) {
+            if (!itemsInBundle.contains(item.getId())) {
+                // Not in bundle - apply regular item offers
+                applyRegularItemOffer(item);
+            }
+        }
+
+        // Save all items
+        orderItemRepository.saveAll(items);
+    }
+
+    /**
+     * Apply regular item offer (Product or Category)
+     * Only called for items NOT in a bundle
+     */
+    private void applyRegularItemOffer(OrderItem item) {
+        if (item.getProduct() == null || item.getProduct().getId() == null) {
+            return;
+        }
+
+        Offer bestOffer = null;
+        BigDecimal bestDiscount = BigDecimal.ZERO;
+        String offerType = null;
+
+        // Priority 1: PRODUCT offer
+        Optional<Offer> productOffer = productOfferService.findBestProductOffer(
+                item.getProduct().getId(),
+                item.getUnitPrice(),
+                item.getQuantity()
+        );
+
+        if (productOffer.isPresent()) {
+            BigDecimal discount = productOfferService.calculateProductOfferDiscount(
+                    productOffer.get(),
+                    item.getUnitPrice(),
+                    item.getQuantity()
+            );
+
+            if (discount.compareTo(BigDecimal.ZERO) > 0) {
+                bestOffer = productOffer.get();
+                bestDiscount = discount;
+                offerType = "PRODUCT";
+            }
+        }
+
+        // Priority 2: CATEGORY offer (if no product offer)
+        if (bestOffer == null) {
+            Optional<Offer> categoryOffer = categoryOfferService.findBestCategoryOffer(
+                    item.getProduct().getId(),
+                    item.getUnitPrice(),
+                    item.getQuantity()
+            );
+
+            if (categoryOffer.isPresent()) {
+                BigDecimal discount = categoryOfferService.calculateCategoryOfferDiscount(
+                        categoryOffer.get(),
+                        item.getUnitPrice(),
+                        item.getQuantity()
+                );
+
+                if (discount.compareTo(BigDecimal.ZERO) > 0) {
+                    bestOffer = categoryOffer.get();
+                    bestDiscount = discount;
+                    offerType = "CATEGORY";
+                }
+            }
+        }
+
+        // Apply best offer found
+        if (bestOffer != null) {
+            item.setOfferId(bestOffer.getId());
+            item.setLineDiscount(bestDiscount);
+
+            log.info("Applied {} offer to item {}: offer '{}' (ID={}), discount=${}",
+                    offerType, item.getId(), bestOffer.getTitle(), bestOffer.getId(), bestDiscount);
+        } else {
+            item.setOfferId(null);
+            item.setLineDiscount(BigDecimal.ZERO);
+        }
+    }
+
+    /**
+     * Recalculate line totals for all items after discounts applied
+     */
+    private void recalculateItemTotals(Order order) {
+        List<OrderItem> items = orderItemRepository.findByOrderId(order.getId());
+
+        for (OrderItem item : items) {
+            BigDecimal lineDiscount = item.getLineDiscount() != null ?
+                    item.getLineDiscount() : BigDecimal.ZERO;
+            BigDecimal taxAmount = item.getTaxAmount() != null ?
+                    item.getTaxAmount() : BigDecimal.ZERO;
+
+            BigDecimal lineTotal = item.getUnitPrice()
+                    .multiply(item.getQuantity())
+                    .subtract(lineDiscount)
+                    .add(taxAmount);
+
+            item.setLineTotal(lineTotal);
+        }
+
+        orderItemRepository.saveAll(items);
+    }
+
+    /**
      * Recalculate order totals
+     *
+     * Flow:
+     * 1. Calculate subtotal from order items (after product/category/bundle discounts)
+     * 2. Apply ORDER-level offer automatically (threshold-based)
+     * 3. Calculate tax on (subtotal - order_discount)
+     * 4. Calculate grand total
      */
     private void recalculateOrderTotals(Order order) {
         List<OrderItem> items = orderItemRepository.findByOrderId(order.getId());
 
-        // Calculate subtotal
+        // Step 1: Calculate subtotal from items (includes item-level discounts)
         BigDecimal subtotal = items.stream()
                 .map(OrderItem::getLineTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         order.setSubtotal(subtotal);
 
-        // Calculate tax (10% for example)
+        // Step 2: Apply ORDER-level offer automatically (threshold-based)
+        try {
+            OfferApplicationResult orderOfferResult = offerEngine.applyOrderOffer(order, subtotal);
+            BigDecimal orderDiscount = orderOfferResult.getDiscountAmount();
+
+            log.debug("ORDER offer applied: {}, discount: ${}",
+                    orderOfferResult.getOfferApplied(), orderDiscount);
+
+        } catch (Exception e) {
+            log.error("Error applying ORDER offer: ", e);
+            order.setDiscountAmount(BigDecimal.ZERO);
+        }
+
+        BigDecimal orderDiscount = order.getDiscountAmount() != null ?
+                order.getDiscountAmount() : BigDecimal.ZERO;
+
+        // Step 3: Calculate tax on (subtotal - order_discount)
         BigDecimal taxRate = BigDecimal.valueOf(0.10);
-        BigDecimal taxableAmount = subtotal.subtract(order.getDiscountAmount() != null ? order.getDiscountAmount() : BigDecimal.ZERO);
+        BigDecimal taxableAmount = subtotal.subtract(orderDiscount);
         BigDecimal taxAmount = taxableAmount.multiply(taxRate).setScale(2, RoundingMode.HALF_UP);
         order.setTaxAmount(taxAmount);
 
-        // Calculate grand total
+        // Step 4: Calculate grand total
         BigDecimal grandTotal = subtotal
-                .subtract(order.getDiscountAmount() != null ? order.getDiscountAmount() : BigDecimal.ZERO)
+                .subtract(orderDiscount)
                 .add(taxAmount);
         order.setGrandTotal(grandTotal);
 
@@ -451,35 +733,20 @@ public class OrderService {
     }
 
     /**
-     * Apply PRODUCT offer to order item automatically
-     * Finds the best active offer and applies it to the item
+     * Search order by order number.
+     * Used by GET /api/orders/search to fetch order details by order number.
+     *
+     * @param orderNumber The order number to search for
+     * @return Order details with items and payments
+     * @throws ResourceNotFoundException if order not found
      */
-    private void applyProductOffer(OrderItem item) {
-        if (item.getProduct() == null || item.getProduct().getId() == null) {
-            return;
-        }
+    @Transactional(readOnly = true)
+    public OrderDTO.OrderResponse searchByOrderNumber(String orderNumber) {
+        Order order = orderRepository.findByOrderNumber(orderNumber)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
 
-        // Find best offer for this product
-        Optional<Offer> bestOffer = productOfferService.findBestProductOffer(
-                item.getProduct().getId(),
-                item.getUnitPrice(),
-                item.getQuantity()
-        );
-
-        if (bestOffer.isPresent()) {
-            Offer offer = bestOffer.get();
-            BigDecimal discount = productOfferService.calculateProductOfferDiscount(
-                    offer,
-                    item.getUnitPrice(),
-                    item.getQuantity()
-            );
-
-            item.setOfferId(offer.getId());
-            item.setLineDiscount(discount);
-        } else {
-            // No offer found - clear any previous offer
-            item.setOfferId(null);
-            item.setLineDiscount(BigDecimal.ZERO);
-        }
+        List<OrderItem> items = orderItemRepository.findByOrderId(order.getId());
+        List<Payment> payments = paymentRepository.findByOrderId(order.getId());
+        return orderMapper.toOrderResponse(order, items, payments);
     }
 }

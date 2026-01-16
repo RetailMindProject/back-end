@@ -3,9 +3,11 @@ package com.example.back_end.modules.register.service;
 import com.example.back_end.exception.CustomException;
 import com.example.back_end.modules.register.dto.RegisterRequestDTO;
 import com.example.back_end.modules.register.dto.RegisterResponseDTO;
+import com.example.back_end.modules.register.entity.Customer;
 import com.example.back_end.modules.register.entity.User;
 import com.example.back_end.modules.register.entity.User.UserRole;
 import com.example.back_end.modules.register.mapper.UserMapper;
+import com.example.back_end.modules.register.repository.CustomerRepository;
 import com.example.back_end.modules.register.repository.UserRepository;
 import com.example.back_end.security.JwtService;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 
@@ -23,6 +26,7 @@ import java.util.List;
 public class RegisterService {
 
     private final UserRepository userRepository;
+    private final CustomerRepository customerRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final UserMapper userMapper;
@@ -35,38 +39,45 @@ public class RegisterService {
             throw new CustomException("Passwords do not match");
         }
 
-        // Check if email already exists
+        // Check if email already exists (users table)
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new CustomException("Email already registered");
+        }
+        // Check if phone/email already exists (customers table) to avoid duplicates
+        if (request.getEmail() != null && customerRepository.existsByEmail(request.getEmail())) {
+            throw new CustomException("Email already registered as customer");
+        }
+        if (request.getPhone() != null && customerRepository.existsByPhone(request.getPhone())) {
+            throw new CustomException("Phone already registered as customer");
         }
 
         // Get current authenticated user
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-        // إذا كان التسجيل الذاتي (للـ CEO الأول فقط)
+        // Self registration (first CEO or CUSTOMER)
         if (request.getIsSelfRegistration() != null && request.getIsSelfRegistration()) {
-            if (!request.getRole().equals(UserRole.CEO)) {
-                throw new CustomException("Self registration is only allowed for CEO role");
+            if (!request.getRole().equals(UserRole.CEO) && !request.getRole().equals(UserRole.CUSTOMER)) {
+                throw new CustomException("Self registration is only allowed for CEO or CUSTOMER roles");
             }
-            return createUser(request);
+            return createUserAndCustomerIfNeeded(request);
         }
 
-        // إذا لم يكن هناك مستخدم مسجل دخول
+        // If no authenticated user
         if (authentication == null || !authentication.isAuthenticated() ||
                 authentication.getPrincipal().equals("anonymousUser")) {
             throw new CustomException("You must be logged in to create a user account");
         }
 
-        // الحصول على المستخدم الحالي
+        // Get current user
         String currentUserEmail = authentication.getName();
         User currentUser = userRepository.findByEmail(currentUserEmail)
                 .orElseThrow(() -> new CustomException("Current user not found"));
 
-        // التحقق من الصلاحيات
+        // Validate permissions
         validateRolePermissions(currentUser.getRole(), request.getRole());
 
-        // Create the user
-        return createUser(request);
+        // Create the user (and customer if CUSTOMER role)
+        return createUserAndCustomerIfNeeded(request);
     }
 
     private void validateRolePermissions(UserRole currentUserRole, UserRole targetRole) {
@@ -96,8 +107,8 @@ public class RegisterService {
         throw new CustomException("You don't have permission to create user accounts");
     }
 
-    private RegisterResponseDTO createUser(RegisterRequestDTO request) {
-        // Create new user
+    private RegisterResponseDTO createUserAndCustomerIfNeeded(RegisterRequestDTO request) {
+        // 1) Create new user
         User user = new User();
         user.setFirstName(request.getFirstName());
         user.setLastName(request.getLastName());
@@ -108,13 +119,30 @@ public class RegisterService {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setIsActive(true);
 
-        // Save user
         User savedUser = userRepository.save(user);
 
-        // Generate JWT token
-        String token = jwtService.generateToken(savedUser.getEmail(), savedUser.getRole().name());
+        // 2) If role is CUSTOMER, also create a record in customers table
+        if (UserRole.CUSTOMER.equals(savedUser.getRole())) {
+            Customer customer = new Customer();
+            customer.setFirstName(savedUser.getFirstName());
+            customer.setLastName(savedUser.getLastName());
+            customer.setPhone(savedUser.getPhone());
+            customer.setEmail(savedUser.getEmail());
+            customer.setLastVisitedAt(LocalDateTime.now());
+            customer.setUserId(savedUser.getId());
+            customerRepository.save(customer);
+        }
 
-        // Return response
+        // 3) Generate JWT token
+        String token = jwtService.generateToken(
+                savedUser.getEmail(),
+                savedUser.getRole().name(),
+                savedUser.getId(),
+                savedUser.getFirstName(),
+                savedUser.getLastName()
+        );
+
+        // 4) Return response
         return userMapper.toRegisterResponseDTO(savedUser, token);
     }
 }
