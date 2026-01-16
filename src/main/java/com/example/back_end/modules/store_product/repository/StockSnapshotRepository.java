@@ -29,6 +29,7 @@ public interface StockSnapshotRepository extends JpaRepository<StockSnapshot, Lo
                    OR p.name ILIKE CONCAT('%', CAST(:q AS TEXT), '%')
                    OR p.sku  ILIKE CONCAT('%', CAST(:q AS TEXT), '%'))
               AND s.store_qty > 0
+              AND p.is_active = true
             ORDER BY p.name ASC
             """,
             countQuery = """
@@ -39,6 +40,7 @@ public interface StockSnapshotRepository extends JpaRepository<StockSnapshot, Lo
                    OR p.name ILIKE CONCAT('%', CAST(:q AS TEXT), '%')
                    OR p.sku  ILIKE CONCAT('%', CAST(:q AS TEXT), '%'))
               AND s.store_qty > 0
+              AND p.is_active = true
             """,
             nativeQuery = true)
     Page<StockProjection> searchStore(@Param("q") String q, Pageable pageable);
@@ -98,8 +100,74 @@ public interface StockSnapshotRepository extends JpaRepository<StockSnapshot, Lo
                    OR p.name ILIKE CONCAT('%', CAST(:q AS TEXT), '%')
                    OR p.sku  ILIKE CONCAT('%', CAST(:q AS TEXT), '%'))
               AND s.store_qty > 0
+              AND p.is_active = true
             ORDER BY p.name
             """,
             nativeQuery = true)
     List<StockProjection> searchStore(@Param("q") String q);
+
+    // Get products with existing inventory (warehouse_qty > 0 OR store_qty > 0) for re-stocking
+    @Query(value = """
+            SELECT 
+              p.id              AS productId,
+              p.sku             AS sku,
+              p.name            AS name,
+              s.store_qty       AS storeQty,
+              s.warehouse_qty   AS warehouseQty,
+              s.last_updated_at AS lastUpdatedAt,
+              p.default_price   AS defaultPrice,
+              p.default_cost    AS defaultCost
+            FROM stock_snapshot s
+            JOIN products p ON p.id = s.product_id
+            WHERE (:q IS NULL 
+                   OR p.name ILIKE CONCAT('%', CAST(:q AS TEXT), '%')
+                   OR p.sku  ILIKE CONCAT('%', CAST(:q AS TEXT), '%'))
+              AND (s.warehouse_qty > 0 OR s.store_qty > 0)
+              AND p.is_active = true
+            ORDER BY p.name ASC
+            """,
+            countQuery = """
+            SELECT COUNT(*)
+            FROM stock_snapshot s
+            JOIN products p ON p.id = s.product_id
+            WHERE (:q IS NULL 
+                   OR p.name ILIKE CONCAT('%', CAST(:q AS TEXT), '%')
+                   OR p.sku  ILIKE CONCAT('%', CAST(:q AS TEXT), '%'))
+              AND (s.warehouse_qty > 0 OR s.store_qty > 0)
+              AND p.is_active = true
+            """,
+            nativeQuery = true)
+    Page<StockProjection> findProductsWithInventory(@Param("q") String q, Pageable pageable);
+
+    // Get products that have waste movements
+    @Query(value = """
+            SELECT DISTINCT
+              p.id              AS productId,
+              p.sku             AS sku,
+              p.name            AS name,
+              COALESCE(s.store_qty, 0)       AS storeQty,
+              COALESCE(s.warehouse_qty, 0)   AS warehouseQty,
+              COALESCE(s.last_updated_at, NOW()) AS lastUpdatedAt,
+              p.default_price   AS defaultPrice,
+              p.default_cost    AS defaultCost
+            FROM inventory_movements im
+            JOIN products p ON p.id = im.product_id
+            LEFT JOIN stock_snapshot s ON s.product_id = p.id
+            WHERE im.ref_type = 'WASTED'
+            AND (:q IS NULL 
+                   OR p.name ILIKE CONCAT('%', CAST(:q AS TEXT), '%')
+                   OR p.sku  ILIKE CONCAT('%', CAST(:q AS TEXT), '%'))
+            ORDER BY p.name ASC
+            """,
+            countQuery = """
+            SELECT COUNT(DISTINCT p.id)
+            FROM inventory_movements im
+            JOIN products p ON p.id = im.product_id
+            WHERE im.ref_type = 'WASTED'
+            AND (:q IS NULL 
+                   OR p.name ILIKE CONCAT('%', CAST(:q AS TEXT), '%')
+                   OR p.sku  ILIKE CONCAT('%', CAST(:q AS TEXT), '%'))
+            """,
+            nativeQuery = true)
+    Page<StockProjection> findWastedProducts(@Param("q") String q, Pageable pageable);
 }

@@ -8,6 +8,8 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 
 @Getter
 @Setter
@@ -51,6 +53,10 @@ public class InventoryMovement {
 
     @Column(columnDefinition = "TEXT")
     private String note;
+
+    @OneToMany(mappedBy = "inventoryMovement", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private Set<InventoryMovementBatch> batches = new HashSet<>();
 
     @PrePersist
     void prePersist() {

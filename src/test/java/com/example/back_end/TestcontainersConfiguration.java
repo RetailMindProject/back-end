@@ -25,6 +25,7 @@ public class TestcontainersConfiguration {
 
     @Bean
     @ServiceConnection(name = "redis")
+    @SuppressWarnings("resource") // Spring manages container lifecycle
     GenericContainer<?> redisContainer() {
         return new GenericContainer<>(DockerImageName.parse("redis:latest")).withExposedPorts(6379);
     }

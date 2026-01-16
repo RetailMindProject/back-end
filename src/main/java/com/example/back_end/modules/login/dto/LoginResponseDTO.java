@@ -1,6 +1,4 @@
 package com.example.back_end.modules.login.dto;
-
-import com.example.back_end.modules.register.entity.User.UserRole;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

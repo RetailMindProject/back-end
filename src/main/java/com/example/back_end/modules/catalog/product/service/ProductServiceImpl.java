@@ -1,6 +1,8 @@
 package com.example.back_end.modules.catalog.product.service;
 
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -18,9 +20,12 @@ import com.example.back_end.modules.catalog.product.repository.ProductMediaRepos
 import com.example.back_end.modules.catalog.product.repository.ProductRepository;
 import com.example.back_end.modules.store_product.entity.StockSnapshot;
 import com.example.back_end.modules.store_product.repository.StockSnapshotRepository;
+import com.example.back_end.modules.store_product.repository.InventoryMovementRepository;
 import com.example.back_end.modules.catalog.category.entity.Category;
 import com.example.back_end.modules.catalog.category.repository.CategoryRepository;
-import com.example.back_end.modules.catalog.product.service.ImageStorageService;
+import com.example.back_end.modules.stock.entity.InventoryMovement;
+import com.example.back_end.modules.stock.enums.InventoryLocationType;
+import com.example.back_end.modules.stock.enums.InventoryRefType;
 
 import java.math.BigDecimal;
 import java.util.HashSet;
@@ -39,6 +44,10 @@ public class ProductServiceImpl implements ProductService {
     private final ProductMediaRepository productMediaRepository;
     private final CategoryRepository categoryRepository;
     private final ImageStorageService imageStorageService;
+    private final InventoryMovementRepository inventoryMovementRepository;
+    
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @Override
     public ProductResponseDTO create(ProductCreateDTO dto) {
@@ -155,15 +164,76 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Transactional
     public void delete(Long id) {
-        if (!repository.existsById(id)) {
-            throw new EntityNotFoundException("Product not found: " + id);
+        // Fetch product with all relationships loaded
+        Product product = repository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Product not found: " + id));
+        
+        // Force load relationships to avoid lazy loading issues
+        product.getCategories().size();
+        product.getProductMedia().size();
+
+        // Merge product to ensure it's managed by EntityManager BEFORE creating related entities
+        Product managedProduct = entityManager.merge(product);
+
+        // Get stock snapshot before deletion
+        StockSnapshot snapshot = stockSnapshotRepository.findById(id).orElse(null);
+        
+        BigDecimal unitCost = managedProduct.getDefaultCost() != null ? managedProduct.getDefaultCost() : BigDecimal.ZERO;
+        BigDecimal warehouseQty = BigDecimal.ZERO;
+        BigDecimal storeQty = BigDecimal.ZERO;
+        
+        // Get quantities from snapshot if it exists
+        if (snapshot != null) {
+            warehouseQty = snapshot.getWarehouseQty() != null ? snapshot.getWarehouseQty() : BigDecimal.ZERO;
+            storeQty = snapshot.getStoreQty() != null ? snapshot.getStoreQty() : BigDecimal.ZERO;
+        } else {
+            // If no snapshot, calculate from existing movements
+            List<InventoryMovement> existingMovements = inventoryMovementRepository.findByProductId(id);
+            if (!existingMovements.isEmpty()) {
+                warehouseQty = existingMovements.stream()
+                        .filter(m -> m.getLocationType() == InventoryLocationType.WAREHOUSE)
+                        .map(InventoryMovement::getQtyChange)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                
+                storeQty = existingMovements.stream()
+                        .filter(m -> m.getLocationType() == InventoryLocationType.STORE)
+                        .map(InventoryMovement::getQtyChange)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+            }
+        }
+        
+        // Create movement records for any remaining inventory BEFORE deleting the product
+        // Use managedProduct to ensure proper entity management
+        if (warehouseQty.compareTo(BigDecimal.ZERO) > 0) {
+            InventoryMovement warehouseRemoval = InventoryMovement.builder()
+                    .product(managedProduct)
+                    .locationType(InventoryLocationType.WAREHOUSE)
+                    .refType(InventoryRefType.ADJUSTMENT)
+                    .qtyChange(warehouseQty.negate())
+                    .unitCost(unitCost)
+                    .note("Product deleted - warehouse inventory removed")
+                    .build();
+            inventoryMovementRepository.saveAndFlush(warehouseRemoval);
+        }
+        
+        if (storeQty.compareTo(BigDecimal.ZERO) > 0) {
+            InventoryMovement storeRemoval = InventoryMovement.builder()
+                    .product(managedProduct)
+                    .locationType(InventoryLocationType.STORE)
+                    .refType(InventoryRefType.ADJUSTMENT)
+                    .qtyChange(storeQty.negate())
+                    .unitCost(unitCost)
+                    .note("Product deleted - store inventory removed")
+                    .build();
+            inventoryMovementRepository.saveAndFlush(storeRemoval);
         }
 
         // Get all ProductMedia for this product before deletion
         List<ProductMedia> productMediaList = productMediaRepository.findByProductIdOrderBySortOrderAsc(id);
 
-        // Delete physical files from storage
+        // Delete physical files from storage (don't let exceptions prevent deletion)
         for (ProductMedia productMedia : productMediaList) {
             if (productMedia.getMedia() != null && productMedia.getMedia().getUrl() != null) {
                 String url = productMedia.getMedia().getUrl();
@@ -176,10 +246,49 @@ public class ProductServiceImpl implements ProductService {
             }
         }
 
-        // Delete the product (cascade delete ProductMedia)
-        repository.deleteById(id);
+        // Clear categories relationship (many-to-many) using managed product
+        managedProduct.getCategories().clear();
+        entityManager.flush();
 
-        // Delete orphaned Media records
+        // Delete ProductMedia explicitly (should cascade but being explicit)
+        if (!productMediaList.isEmpty()) {
+            productMediaRepository.deleteAll(productMediaList);
+            productMediaRepository.flush();
+        }
+
+        // Delete StockSnapshot if it exists
+        if (snapshot != null) {
+            stockSnapshotRepository.delete(snapshot);
+            stockSnapshotRepository.flush();
+        }
+
+        // Delete InventoryMovement records explicitly (they reference the product)
+        // Note: We created deletion records above, but they'll be cascade deleted with the product
+        // So we delete all movements first to avoid foreign key constraint issues
+        List<InventoryMovement> allMovements = inventoryMovementRepository.findByProductId(id);
+        if (!allMovements.isEmpty()) {
+            // Delete movements one by one to avoid batch issues
+            for (InventoryMovement movement : allMovements) {
+                inventoryMovementRepository.delete(movement);
+            }
+            inventoryMovementRepository.flush();
+        }
+        
+        // Now delete the product itself using native SQL to bypass any JPA issues
+        int deletedCount = entityManager.createNativeQuery("DELETE FROM products WHERE id = :id")
+                .setParameter("id", id)
+                .executeUpdate();
+        
+        entityManager.flush();
+        
+        if (deletedCount == 0) {
+            throw new IllegalStateException("Failed to delete product with id: " + id + " - no rows were deleted");
+        }
+        
+        // Clear persistence context to ensure changes are visible
+        entityManager.clear();
+
+        // Delete orphaned Media records (no longer referenced by any ProductMedia)
         List<Media> orphanedMedia = mediaRepository.findOrphanedMedia();
         if (!orphanedMedia.isEmpty()) {
             mediaRepository.deleteAll(orphanedMedia);

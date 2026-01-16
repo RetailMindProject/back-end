@@ -8,8 +8,8 @@ import com.example.back_end.modules.catalog.category.service.CategoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import jakarta.validation.Valid;
 
+import jakarta.validation.Valid;
 import java.util.List;
 
 @RestController
@@ -23,6 +23,11 @@ public class CategoryController {
     @GetMapping
     public ResponseEntity<List<CategoryDTO>> getAll() {
         return ResponseEntity.ok(service.getAll());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<CategoryDTO> getById(@PathVariable Long id) {
+        return ResponseEntity.ok(service.getById(id));
     }
 
     @GetMapping("/tree")
@@ -40,11 +45,6 @@ public class CategoryController {
         return ResponseEntity.ok(service.getAllParentCategories());
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<CategoryDTO> getCategoryById(@PathVariable Long id) {
-        return ResponseEntity.ok(service.getById(id));
-    }
-
     @GetMapping("/{parentId}/sub-categories")
     public ResponseEntity<List<CategoryDTO>> getSubCategories(@PathVariable Long parentId) {
         return ResponseEntity.ok(service.getSubCategories(parentId));
@@ -53,6 +53,11 @@ public class CategoryController {
     @GetMapping("/product/{productId}")
     public ResponseEntity<List<CategoryDTO>> getByProduct(@PathVariable Long productId) {
         return ResponseEntity.ok(service.getByProductId(productId));
+    }
+
+    @GetMapping("/all")
+    public ResponseEntity<List<CategoryDTO>> getAllCategoriesFlat() {
+        return ResponseEntity.ok(service.getAll());
     }
 
     @PostMapping

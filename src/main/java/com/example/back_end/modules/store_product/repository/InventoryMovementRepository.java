@@ -2,11 +2,14 @@ package com.example.back_end.modules.store_product.repository;
 
 import com.example.back_end.modules.stock.entity.InventoryMovement;
 import com.example.back_end.modules.stock.repository.projection.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 public interface InventoryMovementRepository extends JpaRepository<InventoryMovement, Long> {
@@ -170,5 +173,64 @@ public interface InventoryMovementRepository extends JpaRepository<InventoryMove
     List<InventoryTopProductProjection> findTopMovedProductsLastWeek(
             @Param("from") LocalDateTime from,
             @Param("limit") int limit
+    );
+
+    // Find all movements for a specific product
+    List<InventoryMovement> findByProductId(Long productId);
+
+    // Find all movements for a specific product with batches eagerly fetched (for calculating wasted/transferred quantities)
+    @Query("SELECT DISTINCT m FROM InventoryMovement m " +
+           "LEFT JOIN FETCH m.batches " +
+           "WHERE m.product.id = :productId")
+    List<InventoryMovement> findByProductIdWithBatches(@Param("productId") Long productId);
+
+    // Get waste history with filters
+    @Query(value = """
+        SELECT 
+            im.id as movementId,
+            im.product_id as productId,
+            p.name as productName,
+            p.sku as sku,
+            ib.id as batchId,
+            ib.expiration_date as expirationDate,
+            ABS(im.qty_change) as quantity,
+            im.note as wasteReason,
+            im.note as note,
+            im.unit_cost as unitCost,
+            ABS(im.qty_change) * COALESCE(im.unit_cost, 0) as totalCost,
+            im.location_type as locationType,
+            im.moved_at as wastedAt
+        FROM inventory_movements im
+        JOIN products p ON p.id = im.product_id
+        LEFT JOIN inventory_movement_batches imb ON imb.inventory_movement_id = im.id
+        LEFT JOIN inventory_batches ib ON ib.id = imb.batch_id
+        WHERE im.ref_type = 'WASTED'
+        AND (CAST(:productId AS BIGINT) IS NULL OR im.product_id = CAST(:productId AS BIGINT))
+        AND (CAST(:batchId AS BIGINT) IS NULL OR ib.id = CAST(:batchId AS BIGINT))
+        AND (CAST(:fromDate AS TIMESTAMPTZ) IS NULL OR im.moved_at >= CAST(:fromDate AS TIMESTAMPTZ))
+        AND (CAST(:toDate AS TIMESTAMPTZ) IS NULL OR im.moved_at <= CAST(:toDate AS TIMESTAMPTZ))
+        AND (CAST(:wasteReason AS TEXT) IS NULL OR im.note ILIKE CONCAT('%', CAST(:wasteReason AS TEXT), '%'))
+        ORDER BY im.moved_at DESC
+        """,
+        countQuery = """
+        SELECT COUNT(*)
+        FROM inventory_movements im
+        LEFT JOIN inventory_movement_batches imb ON imb.inventory_movement_id = im.id
+        LEFT JOIN inventory_batches ib ON ib.id = imb.batch_id
+        WHERE im.ref_type = 'WASTED'
+        AND (CAST(:productId AS BIGINT) IS NULL OR im.product_id = CAST(:productId AS BIGINT))
+        AND (CAST(:batchId AS BIGINT) IS NULL OR ib.id = CAST(:batchId AS BIGINT))
+        AND (CAST(:fromDate AS TIMESTAMPTZ) IS NULL OR im.moved_at >= CAST(:fromDate AS TIMESTAMPTZ))
+        AND (CAST(:toDate AS TIMESTAMPTZ) IS NULL OR im.moved_at <= CAST(:toDate AS TIMESTAMPTZ))
+        AND (CAST(:wasteReason AS TEXT) IS NULL OR im.note ILIKE CONCAT('%', CAST(:wasteReason AS TEXT), '%'))
+        """,
+        nativeQuery = true)
+    Page<WasteHistoryProjection> findWasteHistory(
+        @Param("productId") Long productId,
+        @Param("batchId") Long batchId,
+        @Param("fromDate") Instant fromDate,
+        @Param("toDate") Instant toDate,
+        @Param("wasteReason") String wasteReason,
+        Pageable pageable
     );
 }

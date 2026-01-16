@@ -5,7 +5,6 @@ import com.example.back_end.modules.offer.entity.Offer;
 import com.example.back_end.modules.offer.entity.OfferBundle;
 import com.example.back_end.modules.offer.entity.OfferCategory;
 import com.example.back_end.modules.offer.entity.OfferProduct;
-import com.example.back_end.modules.register.entity.User;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;

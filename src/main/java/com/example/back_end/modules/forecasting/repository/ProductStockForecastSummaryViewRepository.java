@@ -121,6 +121,6 @@ public class ProductStockForecastSummaryViewRepository {
             sql.append(" AND s.recommended_reorder_qty IS NOT NULL AND s.recommended_reorder_qty > 0 ");
         }
 
-        return jdbcTemplate.queryForObject(sql.toString(), args.toArray(), Long.class);
+        return jdbcTemplate.queryForObject(sql.toString(), Long.class, args.toArray());
     }
 }
