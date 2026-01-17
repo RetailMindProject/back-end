@@ -59,12 +59,14 @@ public class PairingRequestService {
                     "This terminal already has a pending pairing request. Please wait.");
         }
 
-        // Check if cashier already has active request
-        pairingCodeRepository.findActiveRequestByUser(cashierUserId, LocalDateTime.now())
-                .ifPresent(existing -> {
-                    throw new IllegalStateException(
-                            "You already have a pending pairing request. Please wait for approval.");
-                });
+        // Check if cashier already has active request (only if authenticated)
+        if (cashierUserId != null) {
+            pairingCodeRepository.findActiveRequestByUser(cashierUserId, LocalDateTime.now())
+                    .ifPresent(existing -> {
+                        throw new IllegalStateException(
+                                "You already have a pending pairing request. Please wait for approval.");
+                    });
+        }
 
         // Create request in terminal_pairing_codes
         TerminalPairingCode pairingRequest = TerminalPairingCode.builder()

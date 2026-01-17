@@ -114,6 +114,10 @@ public class OrderDTO {
     public static class OrderItemResponse {
         private Long id;
         private Long productId;
+
+        /** Minimal product payload for UI convenience (cart thumbnails). */
+        private ProductMini product;
+
         private BigDecimal unitPrice;
         private BigDecimal quantity;
         private BigDecimal discountAmount;
@@ -121,6 +125,25 @@ public class OrderDTO {
         private Long offerId;
         private String offerTitle;
         private BigDecimal originalLineTotal;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ProductMini {
+        private Long id;
+        private String name;
+        private ImageMini image;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ImageMini {
+        private String url;
+        private String altText;
     }
 
     /**
