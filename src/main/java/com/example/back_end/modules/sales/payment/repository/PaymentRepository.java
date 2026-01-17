@@ -34,6 +34,18 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.order.session.id = :sessionId AND p.method = :method")
     BigDecimal sumBySessionAndMethod(@Param("sessionId") Long sessionId, @Param("method") Payment.PaymentMethod method);
 
+    /**
+     * Receipt summary: sum PAYMENTs by method for an order.
+     */
+    @Query(value = """
+            SELECT p.method as method, COALESCE(SUM(p.amount), 0) as amount
+            FROM payments p
+            WHERE p.order_id = :orderId
+              AND p.type = 'PAYMENT'
+            GROUP BY p.method
+            """, nativeQuery = true)
+    List<com.example.back_end.modules.sales.receipt.repository.PaymentMethodSumRow> sumPaymentsByOrderIdGrouped(@Param("orderId") Long orderId);
+
     // ========================================
     // 💰 Cashier Operations (من cashier module)
     // ========================================

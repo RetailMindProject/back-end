@@ -177,4 +177,11 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
      */
     @Query("SELECT COUNT(o) FROM Order o WHERE o.customerId = :customerId AND o.createdAt >= :since")
     Long countByCustomerIdAndCreatedAtAfter(@Param("customerId") Integer customerId, @Param("since") LocalDateTime since);
+
+    /**
+     * Minimal receipt header fetch.
+     * We only need Order header fields (status, totals, order_number, created_at, paid_at).
+     */
+    @Query("SELECT o FROM Order o WHERE o.id = :orderId")
+    Optional<Order> findReceiptOrderById(@Param("orderId") Long orderId);
 }

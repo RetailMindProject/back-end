@@ -29,13 +29,13 @@ public class JwtService {
         return createToken(claims, email);
     }
 
-//* @param email User email (used as subject)
-// * @param role User role
-// * @param userId Numeric user ID (for RAG service to match with product data)
-// * @param firstName User first name
-// * @param lastName User last name
-// * @return JWT token
-// */
+/* @param email User email (used as subject)
+ * @param role User role
+ * @param userId Numeric user ID (for RAG service to match with product data)
+ * @param firstName User first name
+ * @param lastName User last name
+ * @return JWT token
+ */
 public String generateToken(String email, String role, Integer userId, String firstName, String lastName) {
     Map<String, Object> claims = new HashMap<>();
     claims.put("role", role);

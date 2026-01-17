@@ -22,6 +22,12 @@ public class ProductResponseDTO {
     private Boolean isActive;
     private Instant createdAt;
     private Instant updatedAt;
+
+    /**
+     * Mini primary image representation expected by frontend: product.image.url
+     */
+    private ProductImageMiniDTO image;
+
     private String primaryImageUrl;
     private List<ProductImageDTO> images;
     private BigDecimal storeQty;

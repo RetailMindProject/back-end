@@ -10,6 +10,7 @@ import com.example.back_end.modules.sales.returns.dto.ReturnHistoryDTO;
 import com.example.back_end.modules.sales.returns.entity.ReturnItem;
 import com.example.back_end.modules.sales.returns.repository.ReturnHistoryRepository;
 import com.example.back_end.modules.sales.returns.repository.ReturnItemRepository;
+import com.example.back_end.modules.register.repository.CustomerRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -31,6 +32,7 @@ public class ReturnHistoryService {
     private final OrderRepository orderRepository;
     private final ReturnItemRepository returnItemRepository;
     private final PaymentRepository paymentRepository;
+    private final CustomerRepository customerRepository;
 
     /**
      * A) List original orders that have returns.
@@ -104,6 +106,17 @@ public class ReturnHistoryService {
             throw new ResourceNotFoundException("Order is not a return order");
         }
 
+        // customerId must be copied from ORIGINAL order; if missing in return order for legacy data,
+        // we resolve from the original order as a fallback.
+        Long customerId = returnOrder.getCustomerId();
+        if (customerId == null) {
+            Order original = orderRepository.findById(returnOrder.getParentOrderId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Original order not found"));
+            customerId = original.getCustomerId();
+        }
+
+        String customerName = resolveCustomerName(customerId);
+
         List<ReturnItem> items = returnItemRepository.findByReturnOrderId(returnOrderId);
 
         List<ReturnDTO.ReturnedItemResponse> itemResponses = items.stream()
@@ -126,11 +139,27 @@ public class ReturnHistoryService {
         return ReturnHistoryDTO.ReturnDetails.builder()
                 .returnOrderId(returnOrder.getId())
                 .originalOrderId(returnOrder.getParentOrderId())
-                .customerId(returnOrder.getCustomerId())
+                .customerId(customerId)
+                .customerName(customerName)
                 .totalRefund(returnOrder.getGrandTotal())
                 .items(itemResponses)
                 .refunds(refundResponses)
                 .createdAt(returnOrder.getCreatedAt())
                 .build();
+    }
+
+    private String resolveCustomerName(Long customerId) {
+        if (customerId == null) return null;
+        return customerRepository.findById(customerId.intValue())
+                .map(c -> {
+                    String first = c.getFirstName();
+                    String last = c.getLastName();
+                    String full = null;
+                    if (first != null && last != null) full = (first + " " + last).trim();
+                    else if (first != null) full = first;
+                    else if (last != null) full = last;
+                    return full;
+                })
+                .orElse(null);
     }
 }
