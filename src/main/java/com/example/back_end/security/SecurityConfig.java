@@ -53,6 +53,15 @@ public class SecurityConfig {
                         // Public customer self-registration
                         .requestMatchers("/api/auth/register/customer").permitAll()
 
+                        // ✅ Email Verification & Password Reset (public endpoints)
+                        .requestMatchers("/api/auth/verify-email").permitAll()
+                        .requestMatchers("/api/auth/verify-registration").permitAll()
+                        .requestMatchers("/api/auth/forgot-password").permitAll()
+                        .requestMatchers("/api/auth/reset-password").permitAll()
+                        .requestMatchers("/api/auth/validate-reset-token").permitAll()
+                        // Resend verification requires authentication (user must be logged in)
+                        .requestMatchers("/api/auth/resend-verification").authenticated()
+
                         // Terminal pairing endpoints (public)
                         .requestMatchers(
                                 "/api/terminal/pair",

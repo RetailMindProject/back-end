@@ -4,11 +4,9 @@ import com.example.back_end.exception.CustomException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -52,13 +50,11 @@ public class FileStorageService {
         // التحقق من الملف
         validateFile(file);
 
-        // تنظيف اسم الملف
-        String originalFileName = StringUtils.cleanPath(file.getOriginalFilename());
-
         try {
-            // إنشاء اسم ملف فريد
-            String fileExtension = getFileExtension(originalFileName);
-            String newFileName = UUID.randomUUID().toString() + fileExtension;
+            // إنشاء اسم ملف فريد باستخدام امتداد آمن بناءً على نوع MIME المعتمد
+            // لا نستخدم اسم الملف الأصلي لتجنب ثغرات Path Traversal
+            String safeExtension = getSafeExtensionFromMimeType(file.getContentType());
+            String newFileName = UUID.randomUUID().toString() + safeExtension;
 
             // نسخ الملف إلى الموقع المستهدف
             Path targetLocation = this.fileStorageLocation.resolve(newFileName);
@@ -69,8 +65,8 @@ public class FileStorageService {
             return newFileName;
 
         } catch (IOException ex) {
-            log.error("Could not store file {}. Error: {}", originalFileName, ex.getMessage());
-            throw new CustomException("Could not store file " + originalFileName + ". Please try again!");
+            log.error("Could not store file. Error: {}", ex.getMessage());
+            throw new CustomException("Could not store file. Please try again!");
         }
     }
 
@@ -126,9 +122,23 @@ public class FileStorageService {
         }
     }
 
-    private String getFileExtension(String fileName) {
-        if (fileName == null) return "";
-        int dotIndex = fileName.lastIndexOf('.');
-        return (dotIndex == -1) ? "" : fileName.substring(dotIndex);
+    /**
+     * Get safe file extension based on validated MIME type.
+     * This prevents path traversal attacks by not using user-provided filenames.
+     */
+    private String getSafeExtensionFromMimeType(String mimeType) {
+        if (mimeType == null) {
+            return ".bin";
+        }
+
+        return switch (mimeType) {
+            case "application/pdf" -> ".pdf";
+            case "application/vnd.ms-excel" -> ".xls";
+            case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> ".xlsx";
+            case "image/jpeg" -> ".jpg";
+            case "image/png" -> ".png";
+            case "image/gif" -> ".gif";
+            default -> ".bin";
+        };
     }
 }

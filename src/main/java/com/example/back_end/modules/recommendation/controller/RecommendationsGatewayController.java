@@ -1,7 +1,10 @@
 package com.example.back_end.modules.recommendation.controller;
 
+import com.example.back_end.exception.ResourceNotFoundException;
 import com.example.back_end.modules.recommendation.dto.RecommendationsResponseDTO;
 import com.example.back_end.modules.recommendation.service.RecommendationsGatewayService;
+import com.example.back_end.modules.register.entity.Customer;
+import com.example.back_end.modules.register.repository.CustomerRepository;
 import com.example.back_end.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +24,7 @@ public class RecommendationsGatewayController {
 
     private final RecommendationsGatewayService recommendationsGatewayService;
     private final JwtService jwtService;
+    private final CustomerRepository customerRepository;
 
     @GetMapping("/customers/me")
     @PreAuthorize("hasRole('CUSTOMER')")
@@ -31,31 +35,54 @@ public class RecommendationsGatewayController {
             @RequestHeader(name = "Authorization", required = false) String authorizationHeader
     ) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Long customerId = extractCustomerId(authentication, authorizationHeader);
+
+        // Step 1: Extract userId from JWT
+        Long userId = extractUserId(authentication, authorizationHeader);
+        log.debug("Extracted userId from JWT: {}", userId);
+
+        // Step 2: Convert userId to customerId by looking up customers table
+        Integer customerId = convertUserIdToCustomerId(userId);
+        log.debug("Converted userId {} to customerId {}", userId, customerId);
 
         int safeTopK = Math.min(Math.max(topK, 1), 100);
         int safeCandidateLimit = Math.min(Math.max(candidateLimit, 1), 2000);
 
         String bearerToken = resolveBearerToken(authorizationHeader, authentication);
 
+        // Step 3: Call recommendation service with actual customerId from customers table
         RecommendationsResponseDTO body = recommendationsGatewayService
-                .getRecommendations(customerId, bearerToken, safeTopK, safeCandidateLimit, inStockOnly);
+                .getRecommendations(customerId.longValue(), bearerToken, safeTopK, safeCandidateLimit, inStockOnly);
 
         return ResponseEntity.ok(body);
     }
 
     /**
-     * Extract customerId/userId from authentication.
+     * Convert userId (from JWT/users table) to customerId (from customers table).
+     *
+     * @param userId User ID from JWT token
+     * @return Customer ID from customers table
+     * @throws ResourceNotFoundException if customer not found for this userId
+     */
+    private Integer convertUserIdToCustomerId(Long userId) {
+        Customer customer = customerRepository.findByUserId(userId.intValue())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Customer record not found for userId: " + userId +
+                        ". Please ensure customer registration is complete."));
+        return customer.getId();
+    }
+
+    /**
+     * Extract userId from authentication.
      * Supports both:
      * 1. Jwt principal (future OAuth2 setup)
      * 2. UsernamePasswordAuthenticationToken with email principal (current custom filter setup)
      *
      * @param authentication Spring Security Authentication object
      * @param authorizationHeader Authorization header value (e.g., "Bearer <token>")
-     * @return Numeric userId extracted from JWT claims
+     * @return Numeric userId extracted from JWT claims (from users table, NOT customers table)
      * @throws IllegalStateException if authentication is null or userId claim is missing
      */
-    private Long extractCustomerId(Authentication authentication, String authorizationHeader) {
+    private Long extractUserId(Authentication authentication, String authorizationHeader) {
         if (authentication == null) {
             throw new IllegalStateException("Authentication is null");
         }
