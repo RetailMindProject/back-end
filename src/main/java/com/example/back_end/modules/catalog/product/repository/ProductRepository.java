@@ -32,21 +32,124 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     Page<Product> search(@Param("q") String q, Pageable pageable);
 
     // Advanced filter with sorting
+    // Note: Sorting by warehouseQuantity and sales requires special handling in the service layer
+    // as native queries don't support dynamic sorting on joined/computed fields well
     @Query(value = """
-           SELECT p.* FROM products p
+           SELECT DISTINCT p.* FROM products p
+           LEFT JOIN stock_snapshot ss ON ss.product_id = p.id
+           LEFT JOIN (
+               SELECT oi.product_id, COALESCE(SUM(oi.quantity), 0) AS total_sold
+               FROM order_items oi
+               JOIN orders o ON o.id = oi.order_id
+               WHERE o.status = 'PAID'
+               GROUP BY oi.product_id
+           ) sales ON sales.product_id = p.id
            WHERE (:brand IS NULL OR p.brand ILIKE CAST(:brand AS TEXT))
              AND (:isActive IS NULL OR p.is_active = :isActive)
              AND (:minPrice IS NULL OR p.default_price >= :minPrice)
              AND (:maxPrice IS NULL OR p.default_price <= :maxPrice)
              AND (:sku IS NULL OR p.sku ILIKE CONCAT('%', CAST(:sku AS TEXT), '%'))
+             AND (:search IS NULL OR p.name ILIKE CONCAT('%', CAST(:search AS TEXT), '%') 
+                  OR p.sku ILIKE CONCAT('%', CAST(:search AS TEXT), '%')
+                  OR p.brand ILIKE CONCAT('%', CAST(:search AS TEXT), '%'))
+             AND (:minWarehouseQuantity IS NULL OR COALESCE(ss.warehouse_qty, 0) >= :minWarehouseQuantity)
+             AND (:minStoreQuantity IS NULL OR COALESCE(ss.store_qty, 0) >= :minStoreQuantity)
+             AND (
+               CASE
+                 WHEN :outOfStock = true THEN
+                   (COALESCE(ss.warehouse_qty, 0) + COALESCE(ss.store_qty, 0)) = 0
+                 WHEN :lowStock = true THEN
+                   (COALESCE(ss.warehouse_qty, 0) + COALESCE(ss.store_qty, 0)) > 0
+                   AND (COALESCE(ss.warehouse_qty, 0) + COALESCE(ss.store_qty, 0)) < 10
+                 ELSE TRUE
+               END
+             )
+           ORDER BY p.created_at DESC
            """,
            countQuery = """
-           SELECT COUNT(*) FROM products p
+           SELECT COUNT(DISTINCT p.id) FROM products p
+           LEFT JOIN stock_snapshot ss ON ss.product_id = p.id
            WHERE (:brand IS NULL OR p.brand ILIKE CAST(:brand AS TEXT))
              AND (:isActive IS NULL OR p.is_active = :isActive)
              AND (:minPrice IS NULL OR p.default_price >= :minPrice)
              AND (:maxPrice IS NULL OR p.default_price <= :maxPrice)
              AND (:sku IS NULL OR p.sku ILIKE CONCAT('%', CAST(:sku AS TEXT), '%'))
+             AND (:search IS NULL OR p.name ILIKE CONCAT('%', CAST(:search AS TEXT), '%') 
+                  OR p.sku ILIKE CONCAT('%', CAST(:search AS TEXT), '%')
+                  OR p.brand ILIKE CONCAT('%', CAST(:search AS TEXT), '%'))
+             AND (:minWarehouseQuantity IS NULL OR COALESCE(ss.warehouse_qty, 0) >= :minWarehouseQuantity)
+             AND (:minStoreQuantity IS NULL OR COALESCE(ss.store_qty, 0) >= :minStoreQuantity)
+             AND (
+               CASE
+                 WHEN :outOfStock = true THEN
+                   (COALESCE(ss.warehouse_qty, 0) + COALESCE(ss.store_qty, 0)) = 0
+                 WHEN :lowStock = true THEN
+                   (COALESCE(ss.warehouse_qty, 0) + COALESCE(ss.store_qty, 0)) > 0
+                   AND (COALESCE(ss.warehouse_qty, 0) + COALESCE(ss.store_qty, 0)) < 10
+                 ELSE TRUE
+               END
+             )
+           """,
+           nativeQuery = true)
+    List<Product> filterList(@Param("brand") String brand,
+                             @Param("isActive") Boolean isActive,
+                             @Param("minPrice") BigDecimal minPrice,
+                             @Param("maxPrice") BigDecimal maxPrice,
+                             @Param("sku") String sku,
+                             @Param("minWarehouseQuantity") Integer minWarehouseQuantity,
+                             @Param("minStoreQuantity") Integer minStoreQuantity,
+                             @Param("search") String search,
+                             @Param("lowStock") Boolean lowStock,
+                             @Param("outOfStock") Boolean outOfStock);
+    
+    // Enhanced filter with all new parameters
+    @Query(value = """
+           SELECT DISTINCT p.* FROM products p
+           LEFT JOIN stock_snapshot ss ON ss.product_id = p.id
+           WHERE (:brand IS NULL OR p.brand ILIKE CAST(:brand AS TEXT))
+             AND (:isActive IS NULL OR p.is_active = :isActive)
+             AND (:minPrice IS NULL OR p.default_price >= :minPrice)
+             AND (:maxPrice IS NULL OR p.default_price <= :maxPrice)
+             AND (:sku IS NULL OR p.sku ILIKE CONCAT('%', CAST(:sku AS TEXT), '%'))
+             AND (:search IS NULL OR p.name ILIKE CONCAT('%', CAST(:search AS TEXT), '%') 
+                  OR p.sku ILIKE CONCAT('%', CAST(:search AS TEXT), '%')
+                  OR p.brand ILIKE CONCAT('%', CAST(:search AS TEXT), '%'))
+             AND (:minWarehouseQuantity IS NULL OR COALESCE(ss.warehouse_qty, 0) >= :minWarehouseQuantity)
+             AND (:minStoreQuantity IS NULL OR COALESCE(ss.store_qty, 0) >= :minStoreQuantity)
+             AND (
+               CASE
+                 WHEN :outOfStock = true THEN
+                   (COALESCE(ss.warehouse_qty, 0) + COALESCE(ss.store_qty, 0)) = 0
+                 WHEN :lowStock = true THEN
+                   (COALESCE(ss.warehouse_qty, 0) + COALESCE(ss.store_qty, 0)) > 0
+                   AND (COALESCE(ss.warehouse_qty, 0) + COALESCE(ss.store_qty, 0)) < 10
+                 ELSE TRUE
+               END
+             )
+           """,
+           countQuery = """
+           SELECT COUNT(DISTINCT p.id) FROM products p
+           LEFT JOIN stock_snapshot ss ON ss.product_id = p.id
+           WHERE (:brand IS NULL OR p.brand ILIKE CAST(:brand AS TEXT))
+             AND (:isActive IS NULL OR p.is_active = :isActive)
+             AND (:minPrice IS NULL OR p.default_price >= :minPrice)
+             AND (:maxPrice IS NULL OR p.default_price <= :maxPrice)
+             AND (:sku IS NULL OR p.sku ILIKE CONCAT('%', CAST(:sku AS TEXT), '%'))
+             AND (:search IS NULL OR p.name ILIKE CONCAT('%', CAST(:search AS TEXT), '%') 
+                  OR p.sku ILIKE CONCAT('%', CAST(:search AS TEXT), '%')
+                  OR p.brand ILIKE CONCAT('%', CAST(:search AS TEXT), '%'))
+             AND (:minWarehouseQuantity IS NULL OR COALESCE(ss.warehouse_qty, 0) >= :minWarehouseQuantity)
+             AND (:minStoreQuantity IS NULL OR COALESCE(ss.store_qty, 0) >= :minStoreQuantity)
+             AND (
+               CASE
+                 WHEN :outOfStock = true THEN
+                   (COALESCE(ss.warehouse_qty, 0) + COALESCE(ss.store_qty, 0)) = 0
+                 WHEN :lowStock = true THEN
+                   (COALESCE(ss.warehouse_qty, 0) + COALESCE(ss.store_qty, 0)) > 0
+                   AND (COALESCE(ss.warehouse_qty, 0) + COALESCE(ss.store_qty, 0)) < 10
+                 ELSE TRUE
+               END
+             )
            """,
            nativeQuery = true)
     Page<Product> filter(@Param("brand") String brand,
@@ -54,6 +157,11 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
                          @Param("minPrice") BigDecimal minPrice,
                          @Param("maxPrice") BigDecimal maxPrice,
                          @Param("sku") String sku,
+                         @Param("minWarehouseQuantity") Integer minWarehouseQuantity,
+                         @Param("minStoreQuantity") Integer minStoreQuantity,
+                         @Param("search") String search,
+                         @Param("lowStock") Boolean lowStock,
+                         @Param("outOfStock") Boolean outOfStock,
                          Pageable pageable);
 
 
@@ -172,5 +280,97 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
            """,
            nativeQuery = true)
     List<Product> fuzzySearch(@Param("q") String query, @Param("minSim") float minSimilarity);
+
+    /**
+     * Count total products with filters
+     */
+    @Query(value = """
+           SELECT COUNT(*) FROM products p
+           WHERE (:brand IS NULL OR p.brand ILIKE CAST(:brand AS TEXT))
+             AND (:isActive IS NULL OR p.is_active = :isActive)
+             AND (:minPrice IS NULL OR p.default_price >= :minPrice)
+             AND (:maxPrice IS NULL OR p.default_price <= :maxPrice)
+             AND (:sku IS NULL OR p.sku ILIKE CONCAT('%', CAST(:sku AS TEXT), '%'))
+           """, nativeQuery = true)
+    long countWithFilters(@Param("brand") String brand,
+                         @Param("isActive") Boolean isActive,
+                         @Param("minPrice") BigDecimal minPrice,
+                         @Param("maxPrice") BigDecimal maxPrice,
+                         @Param("sku") String sku);
+
+    /**
+     * Count active products with filters
+     */
+    @Query(value = """
+           SELECT COUNT(*) FROM products p
+           WHERE p.is_active = true
+             AND (:brand IS NULL OR p.brand ILIKE CAST(:brand AS TEXT))
+             AND (:minPrice IS NULL OR p.default_price >= :minPrice)
+             AND (:maxPrice IS NULL OR p.default_price <= :maxPrice)
+             AND (:sku IS NULL OR p.sku ILIKE CONCAT('%', CAST(:sku AS TEXT), '%'))
+           """, nativeQuery = true)
+    long countActiveWithFilters(@Param("brand") String brand,
+                               @Param("minPrice") BigDecimal minPrice,
+                               @Param("maxPrice") BigDecimal maxPrice,
+                               @Param("sku") String sku);
+
+    /**
+     * Count products with low stock (total quantity > 0 AND < threshold)
+     */
+    @Query(value = """
+           SELECT COUNT(DISTINCT p.id) FROM products p
+           LEFT JOIN stock_snapshot ss ON ss.product_id = p.id
+           WHERE (:brand IS NULL OR p.brand ILIKE CAST(:brand AS TEXT))
+             AND (:isActive IS NULL OR p.is_active = :isActive)
+             AND (:minPrice IS NULL OR p.default_price >= :minPrice)
+             AND (:maxPrice IS NULL OR p.default_price <= :maxPrice)
+             AND (:sku IS NULL OR p.sku ILIKE CONCAT('%', CAST(:sku AS TEXT), '%'))
+             AND (COALESCE(ss.store_qty, 0) + COALESCE(ss.warehouse_qty, 0)) > 0
+             AND (COALESCE(ss.store_qty, 0) + COALESCE(ss.warehouse_qty, 0)) < :threshold
+           """, nativeQuery = true)
+    long countLowStock(@Param("brand") String brand,
+                      @Param("isActive") Boolean isActive,
+                      @Param("minPrice") BigDecimal minPrice,
+                      @Param("maxPrice") BigDecimal maxPrice,
+                      @Param("sku") String sku,
+                      @Param("threshold") BigDecimal threshold);
+
+    /**
+     * Count products that are out of stock (total quantity = 0 or no stock record)
+     */
+    @Query(value = """
+           SELECT COUNT(DISTINCT p.id) FROM products p
+           LEFT JOIN stock_snapshot ss ON ss.product_id = p.id
+           WHERE (:brand IS NULL OR p.brand ILIKE CAST(:brand AS TEXT))
+             AND (:isActive IS NULL OR p.is_active = :isActive)
+             AND (:minPrice IS NULL OR p.default_price >= :minPrice)
+             AND (:maxPrice IS NULL OR p.default_price <= :maxPrice)
+             AND (:sku IS NULL OR p.sku ILIKE CONCAT('%', CAST(:sku AS TEXT), '%'))
+             AND (ss.product_id IS NULL OR (COALESCE(ss.store_qty, 0) + COALESCE(ss.warehouse_qty, 0)) = 0)
+           """, nativeQuery = true)
+    long countOutOfStock(@Param("brand") String brand,
+                        @Param("isActive") Boolean isActive,
+                        @Param("minPrice") BigDecimal minPrice,
+                        @Param("maxPrice") BigDecimal maxPrice,
+                        @Param("sku") String sku);
+
+    /**
+     * Calculate total inventory value (sum of (store_qty + warehouse_qty) * default_cost)
+     */
+    @Query(value = """
+           SELECT COALESCE(SUM((COALESCE(ss.store_qty, 0) + COALESCE(ss.warehouse_qty, 0)) * COALESCE(p.default_cost, 0)), 0)
+           FROM products p
+           LEFT JOIN stock_snapshot ss ON ss.product_id = p.id
+           WHERE (:brand IS NULL OR p.brand ILIKE CAST(:brand AS TEXT))
+             AND (:isActive IS NULL OR p.is_active = :isActive)
+             AND (:minPrice IS NULL OR p.default_price >= :minPrice)
+             AND (:maxPrice IS NULL OR p.default_price <= :maxPrice)
+             AND (:sku IS NULL OR p.sku ILIKE CONCAT('%', CAST(:sku AS TEXT), '%'))
+           """, nativeQuery = true)
+    BigDecimal calculateTotalValue(@Param("brand") String brand,
+                                  @Param("isActive") Boolean isActive,
+                                  @Param("minPrice") BigDecimal minPrice,
+                                  @Param("maxPrice") BigDecimal maxPrice,
+                                  @Param("sku") String sku);
 
 }

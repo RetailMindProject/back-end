@@ -169,5 +169,64 @@ public interface StockSnapshotRepository extends JpaRepository<StockSnapshot, Lo
                    OR p.sku  ILIKE CONCAT('%', CAST(:q AS TEXT), '%'))
             """,
             nativeQuery = true)
-    Page<StockProjection> findWastedProducts(@Param("q") String q, Pageable pageable);
+            Page<StockProjection> findWastedProducts(@Param("q") String q, Pageable pageable);
+
+    /**
+     * Count total products with store quantity > 0 (with filters)
+     */
+    @Query(value = """
+           SELECT COUNT(DISTINCT p.id) FROM stock_snapshot ss
+           JOIN products p ON p.id = ss.product_id
+           WHERE ss.store_qty > 0
+             AND (:brand IS NULL OR p.brand ILIKE CAST(:brand AS TEXT))
+             AND (:isActive IS NULL OR p.is_active = :isActive)
+             AND (:minPrice IS NULL OR p.default_price >= :minPrice)
+             AND (:maxPrice IS NULL OR p.default_price <= :maxPrice)
+             AND (:sku IS NULL OR p.sku ILIKE CONCAT('%', CAST(:sku AS TEXT), '%'))
+           """, nativeQuery = true)
+    long countTotalStoreProducts(@Param("brand") String brand,
+                                 @Param("isActive") Boolean isActive,
+                                 @Param("minPrice") BigDecimal minPrice,
+                                 @Param("maxPrice") BigDecimal maxPrice,
+                                 @Param("sku") String sku);
+
+    /**
+     * Count products with low stock (storeQuantity > 0 AND < threshold)
+     */
+    @Query(value = """
+           SELECT COUNT(DISTINCT p.id) FROM stock_snapshot ss
+           JOIN products p ON p.id = ss.product_id
+           WHERE ss.store_qty > 0
+             AND ss.store_qty < :threshold
+             AND (:brand IS NULL OR p.brand ILIKE CAST(:brand AS TEXT))
+             AND (:isActive IS NULL OR p.is_active = :isActive)
+             AND (:minPrice IS NULL OR p.default_price >= :minPrice)
+             AND (:maxPrice IS NULL OR p.default_price <= :maxPrice)
+             AND (:sku IS NULL OR p.sku ILIKE CONCAT('%', CAST(:sku AS TEXT), '%'))
+           """, nativeQuery = true)
+    long countLowStoreStock(@Param("brand") String brand,
+                           @Param("isActive") Boolean isActive,
+                           @Param("minPrice") BigDecimal minPrice,
+                           @Param("maxPrice") BigDecimal maxPrice,
+                           @Param("sku") String sku,
+                           @Param("threshold") BigDecimal threshold);
+
+    /**
+     * Count products that are out of stock (storeQuantity = 0)
+     */
+    @Query(value = """
+           SELECT COUNT(DISTINCT p.id) FROM stock_snapshot ss
+           JOIN products p ON p.id = ss.product_id
+           WHERE ss.store_qty = 0
+             AND (:brand IS NULL OR p.brand ILIKE CAST(:brand AS TEXT))
+             AND (:isActive IS NULL OR p.is_active = :isActive)
+             AND (:minPrice IS NULL OR p.default_price >= :minPrice)
+             AND (:maxPrice IS NULL OR p.default_price <= :maxPrice)
+             AND (:sku IS NULL OR p.sku ILIKE CONCAT('%', CAST(:sku AS TEXT), '%'))
+           """, nativeQuery = true)
+    long countOutOfStoreStock(@Param("brand") String brand,
+                             @Param("isActive") Boolean isActive,
+                             @Param("minPrice") BigDecimal minPrice,
+                             @Param("maxPrice") BigDecimal maxPrice,
+                             @Param("sku") String sku);
 }

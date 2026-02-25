@@ -2,6 +2,7 @@ package com.example.back_end.modules.store_product.controller;
 
 import com.example.back_end.modules.store_product.dto.AdjustQuantityDTO;
 import com.example.back_end.modules.store_product.dto.StoreProductResponseDTO;
+import com.example.back_end.modules.store_product.dto.StoreProductStatsDTO;
 import com.example.back_end.modules.store_product.dto.StoreTransferRequestDTO;
 import com.example.back_end.modules.store_product.dto.WasteRequestDTO;
 import com.example.back_end.modules.store_product.dto.WasteResponseDTO;
@@ -179,11 +180,30 @@ public class StoreProductController {
             @RequestParam(required = false) Long batchId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant fromDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant toDate,
-            @RequestParam(required = false) String wasteReason,
+            @RequestParam(required = false) String reason,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false, defaultValue = "latest") String sortBy) {
         
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "wastedAt"));
-        return ResponseEntity.ok(service.getWasteHistory(productId, batchId, fromDate, toDate, wasteReason, pageable));
-    }   
+        // Parse sortBy parameter
+        // For native queries, we need to use the database column name "moved_at"
+        Sort.Direction sortDirection = "oldest".equalsIgnoreCase(sortBy) 
+                ? Sort.Direction.ASC 
+                : Sort.Direction.DESC;
+        
+        // Use "moved_at" as the sort field (database column name for native queries)
+        Pageable pageable = PageRequest.of(page, size, Sort.by(sortDirection, "moved_at"));
+        return ResponseEntity.ok(service.getWasteHistory(productId, batchId, fromDate, toDate, reason, pageable));
+    }
+
+    // Get store product statistics
+    @GetMapping("/stats")
+    public ResponseEntity<StoreProductStatsDTO> getStoreProductStats(
+            @RequestParam(required = false) String brand,
+            @RequestParam(required = false) Boolean isActive,
+            @RequestParam(required = false) BigDecimal minPrice,
+            @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(required = false) String sku) {
+        return ResponseEntity.ok(service.getStoreProductStats(brand, isActive, minPrice, maxPrice, sku));
+    }
 }

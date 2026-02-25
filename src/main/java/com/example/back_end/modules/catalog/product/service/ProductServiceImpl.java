@@ -5,7 +5,9 @@ import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +25,8 @@ import com.example.back_end.modules.store_product.repository.StockSnapshotReposi
 import com.example.back_end.modules.store_product.repository.InventoryMovementRepository;
 import com.example.back_end.modules.catalog.category.entity.Category;
 import com.example.back_end.modules.catalog.category.repository.CategoryRepository;
+import com.example.back_end.modules.catalog.category.service.CategoryService;
+import com.example.back_end.modules.catalog.category.dto.CategoryDTO;
 import com.example.back_end.modules.stock.entity.InventoryMovement;
 import com.example.back_end.modules.stock.enums.InventoryLocationType;
 import com.example.back_end.modules.stock.enums.InventoryRefType;
@@ -30,6 +34,7 @@ import com.example.back_end.modules.stock.enums.InventoryRefType;
 import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -43,6 +48,7 @@ public class ProductServiceImpl implements ProductService {
     private final MediaRepository mediaRepository;
     private final ProductMediaRepository productMediaRepository;
     private final CategoryRepository categoryRepository;
+    private final CategoryService categoryService;
     private final ImageStorageService imageStorageService;
     private final InventoryMovementRepository inventoryMovementRepository;
     
@@ -83,16 +89,53 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional(readOnly = true)
     public ProductResponseDTO getById(Long id) {
+        // Default behavior: don't include stock and categories (defaults to false)
+        return getById(id, false, false);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ProductResponseDTO getById(Long id, boolean includeStock, boolean includeCategories) {
         Product p = repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Product not found: " + id));
-        // Force load productMedia
+        // Force load productMedia (always needed)
         p.getProductMedia().size();
-        p.getCategories().size();
-
-        // Get stock snapshot (if exists)
-        StockSnapshot snapshot = stockSnapshotRepository.findById(id).orElse(null);
-
-        return ProductMapper.toResponse(p, snapshot);
+        
+        // Create DTO - use a version that doesn't auto-load categories
+        ProductResponseDTO dto = ProductMapper.toResponse(p);
+        
+        // Clear categories initially (we'll set them conditionally)
+        dto.setCategories(null);
+        
+        // Include stock quantities if requested
+        if (includeStock) {
+            Optional<StockSnapshot> stockOpt = stockSnapshotRepository.findById(id);
+            if (stockOpt.isPresent()) {
+                StockSnapshot snapshot = stockOpt.get();
+                dto.setWarehouseQty(snapshot.getWarehouseQty() != null ? snapshot.getWarehouseQty() : BigDecimal.ZERO);
+                dto.setStoreQty(snapshot.getStoreQty() != null ? snapshot.getStoreQty() : BigDecimal.ZERO);
+            } else {
+                // Product not in stock table, set to 0
+                dto.setWarehouseQty(BigDecimal.ZERO);
+                dto.setStoreQty(BigDecimal.ZERO);
+            }
+        } else {
+            // Set to null if not requested
+            dto.setWarehouseQty(null);
+            dto.setStoreQty(null);
+        }
+        
+        // Include categories if requested
+        if (includeCategories) {
+            List<CategoryDTO> categories = categoryService.getByProductId(id);
+            // Ensure we return an empty array instead of null when no categories
+            dto.setCategories(categories != null ? categories : new java.util.ArrayList<>());
+        } else {
+            // Explicitly set to null when not requested
+            dto.setCategories(null);
+        }
+        
+        return dto;
     }
 
     @Override
@@ -115,20 +158,130 @@ public class ProductServiceImpl implements ProductService {
     @Transactional(readOnly = true)
     public Page<ProductResponseDTO> filter(String brand, Boolean isActive,
                                            BigDecimal minPrice, BigDecimal maxPrice,
-                                           String sku, Pageable pageable) {
+                                           String sku, Integer minWarehouseQuantity,
+                                           Integer minStoreQuantity, String search,
+                                           Boolean lowStock, Boolean outOfStock,
+                                           Pageable pageable,
+                                           boolean includeStock, boolean includeCategories) {
         // Validate price range
         if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
             throw new IllegalArgumentException("Minimum price cannot be greater than maximum price");
         }
-        return repository.filter(brand, isActive, minPrice, maxPrice, sku, pageable)
-                .map(product -> {
-                    // Force load productMedia
-                    product.getProductMedia().size();
-                    product.getCategories().size();
-                    // Get stock snapshot (if exists)
-                    StockSnapshot snapshot = stockSnapshotRepository.findById(product.getId()).orElse(null);
-                    return ProductMapper.toResponse(product, snapshot);
+        
+        // ✅ STEP 1: Apply filters and pagination
+        // Handle special sorting cases (warehouseQuantity, sales) that require joins
+        Page<Product> products;
+        Sort.Order sortOrder = pageable.getSort().isSorted() ? 
+                pageable.getSort().iterator().next() : null;
+        
+        if (sortOrder != null && ("warehouseQty".equals(sortOrder.getProperty()) || 
+                                  "warehouseQty_with_zero_last".equals(sortOrder.getProperty()) ||
+                                  "sales".equals(sortOrder.getProperty()))) {
+            // For warehouseQuantity and sales sorting, we need to fetch all matching products,
+            // sort them, then paginate (less efficient but necessary for these fields)
+            List<Product> allProducts = repository.filterList(brand, isActive, minPrice, maxPrice, sku,
+                    minWarehouseQuantity, minStoreQuantity, search, lowStock, outOfStock);
+            
+            // Sort in memory
+            if ("warehouseQty".equals(sortOrder.getProperty())) {
+                allProducts.sort((p1, p2) -> {
+                    BigDecimal qty1 = getWarehouseQuantity(p1.getId());
+                    BigDecimal qty2 = getWarehouseQuantity(p2.getId());
+                    int comparison = qty1.compareTo(qty2);
+                    return sortOrder.getDirection() == Sort.Direction.ASC ? comparison : -comparison;
                 });
+            } else if ("warehouseQty_with_zero_last".equals(sortOrder.getProperty())) {
+                // Sort by warehouseQuantity DESC, but put zero quantities at the bottom
+                allProducts.sort((p1, p2) -> {
+                    BigDecimal qty1 = getWarehouseQuantity(p1.getId());
+                    BigDecimal qty2 = getWarehouseQuantity(p2.getId());
+                    boolean isZero1 = qty1.compareTo(BigDecimal.ZERO) == 0;
+                    boolean isZero2 = qty2.compareTo(BigDecimal.ZERO) == 0;
+                    
+                    // If one is zero and the other is not, zero goes to bottom
+                    if (isZero1 && !isZero2) return 1;  // p1 (zero) goes after p2
+                    if (!isZero1 && isZero2) return -1; // p2 (zero) goes after p1
+                    
+                    // Both are zero or both are non-zero: sort by quantity DESC
+                    int comparison = qty2.compareTo(qty1); // DESC order (qty2.compareTo(qty1))
+                    return comparison;
+                });
+            } else if ("sales".equals(sortOrder.getProperty())) {
+                allProducts.sort((p1, p2) -> {
+                    BigDecimal sales1 = getSalesCount(p1.getId());
+                    BigDecimal sales2 = getSalesCount(p2.getId());
+                    int comparison = sales1.compareTo(sales2);
+                    return sortOrder.getDirection() == Sort.Direction.ASC ? comparison : -comparison;
+                });
+            }
+            
+            // Manual pagination
+            int start = (int) pageable.getOffset();
+            int end = Math.min(start + pageable.getPageSize(), allProducts.size());
+            List<Product> paginatedProducts = start < allProducts.size() ? 
+                    allProducts.subList(start, end) : List.of();
+            
+            products = new PageImpl<>(
+                    paginatedProducts, pageable, allProducts.size());
+        } else {
+            // Use standard pagination for other sort fields
+            // For standard sorting, we can use the Pageable directly
+            products = repository.filter(brand, isActive, minPrice, maxPrice, sku,
+                    minWarehouseQuantity, minStoreQuantity, search, lowStock, outOfStock, pageable);
+        }
+        
+        // ✅ STEP 2: Map only the paginated products (e.g., 10 products, not all)
+        // Ensure we always return a proper Page structure, even when empty
+        Page<ProductResponseDTO> productDTOs = products.map(product -> {
+            // Force load productMedia (always needed)
+            product.getProductMedia().size();
+            
+            // Create DTO - use a version that doesn't auto-load categories
+            ProductResponseDTO dto = ProductMapper.toResponse(product);
+            
+            // Clear categories initially (we'll set them conditionally)
+            dto.setCategories(null);
+            
+            // ✅ STEP 3: Fetch stock ONLY for the paginated products (e.g., 10 products)
+            if (includeStock) {
+                Optional<StockSnapshot> stockOpt = stockSnapshotRepository.findById(product.getId());
+                if (stockOpt.isPresent()) {
+                    StockSnapshot snapshot = stockOpt.get();
+                    dto.setWarehouseQty(snapshot.getWarehouseQty() != null ? snapshot.getWarehouseQty() : BigDecimal.ZERO);
+                    dto.setStoreQty(snapshot.getStoreQty() != null ? snapshot.getStoreQty() : BigDecimal.ZERO);
+                } else {
+                    // Product not in stock table, set to 0
+                    dto.setWarehouseQty(BigDecimal.ZERO);
+                    dto.setStoreQty(BigDecimal.ZERO);
+                }
+            } else {
+                // Set to null if not requested
+                dto.setWarehouseQty(null);
+                dto.setStoreQty(null);
+            }
+            
+            // ✅ STEP 4: Fetch categories ONLY for the paginated products (e.g., 10 products)
+            if (includeCategories) {
+                List<CategoryDTO> categories = categoryService.getByProductId(product.getId());
+                // Ensure we return an empty array instead of null when no categories
+                dto.setCategories(categories != null ? categories : new java.util.ArrayList<>());
+            } else {
+                // Explicitly set to null when not requested
+                dto.setCategories(null);
+            }
+            
+            return dto;
+        });
+        
+        // Spring's Page.map() preserves the pagination structure, so we always get a proper Page response
+        // even when content is empty. The response will include:
+        // - content: [] (empty array when no results)
+        // - totalElements: 0
+        // - totalPages: 0
+        // - number: current page number
+        // - size: page size
+        // - first, last, etc.
+        return productDTOs;
     }
 
     @Override
@@ -502,6 +655,69 @@ public class ProductServiceImpl implements ProductService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public ProductStatsDTO getProductStats(String brand, Boolean isActive, BigDecimal minPrice, BigDecimal maxPrice, String sku) {
+        // Validate price range
+        if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
+            throw new IllegalArgumentException("Minimum price cannot be greater than maximum price");
+        }
+
+        // Count total products
+        long totalProducts = repository.countWithFilters(brand, isActive, minPrice, maxPrice, sku);
+
+        // Count active products
+        long activeProducts = repository.countActiveWithFilters(brand, minPrice, maxPrice, sku);
+
+        // Count inactive products
+        long inactiveProducts = totalProducts - activeProducts;
+
+        // Count low stock products (threshold: 10)
+        BigDecimal lowStockThreshold = BigDecimal.valueOf(10);
+        long lowStock = repository.countLowStock(brand, isActive, minPrice, maxPrice, sku, lowStockThreshold);
+
+        // Count out of stock products
+        long outOfStock = repository.countOutOfStock(brand, isActive, minPrice, maxPrice, sku);
+
+        // Count in stock products
+        long inStock = totalProducts - outOfStock;
+
+        // Calculate total inventory value
+        BigDecimal totalValue = repository.calculateTotalValue(brand, isActive, minPrice, maxPrice, sku);
+
+        return ProductStatsDTO.builder()
+                .totalProducts(totalProducts)
+                .activeProducts(activeProducts)
+                .inactiveProducts(inactiveProducts)
+                .lowStock(lowStock)
+                .outOfStock(outOfStock)
+                .inStock(inStock)
+                .totalValue(totalValue)
+                .build();
+    }
+
+    private BigDecimal getWarehouseQuantity(Long productId) {
+        Optional<StockSnapshot> snapshot = stockSnapshotRepository.findById(productId);
+        return snapshot.map(s -> s.getWarehouseQty() != null ? s.getWarehouseQty() : BigDecimal.ZERO)
+                .orElse(BigDecimal.ZERO);
+    }
+    
+    private BigDecimal getSalesCount(Long productId) {
+        // Query order_items to get total quantity sold for this product from PAID orders
+        // Using a simple native query approach
+        String sql = """
+            SELECT COALESCE(SUM(oi.quantity), 0)
+            FROM order_items oi
+            JOIN orders o ON o.id = oi.order_id
+            WHERE oi.product_id = :productId
+              AND o.status = 'PAID'
+            """;
+        Object result = entityManager.createNativeQuery(sql)
+                .setParameter("productId", productId)
+                .getSingleResult();
+        return result != null ? (BigDecimal) result : BigDecimal.ZERO;
+    }
+    
     private Set<Category> resolveCategoriesForProduct(Long parentCategoryId, Long subCategoryId) {
         Set<Category> categories = new HashSet<>();
 

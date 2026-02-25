@@ -1,6 +1,7 @@
 package com.example.back_end.modules.sales.order.repository;
 
 import com.example.back_end.modules.sales.order.entity.Order;
+import com.example.back_end.modules.sales.order.repository.projection.OrderReportProjection;
 import com.example.back_end.modules.dashboard.storedashboard.projection.*;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -8,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -177,4 +179,142 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
      */
     @Query("SELECT COUNT(o) FROM Order o WHERE o.customerId = :customerId AND o.createdAt >= :since")
     Long countByCustomerIdAndCreatedAtAfter(@Param("customerId") Integer customerId, @Param("since") LocalDateTime since);
+
+    /**
+     * Get order report with pagination, filtering, and sorting
+     * Joins orders with sessions, users (cashier), customers, and payments
+     */
+    @Query(value = """
+        SELECT 
+            o.id AS orderId,
+            o.order_number AS orderNumber,
+            o.created_at AS createdAt,
+            o.paid_at AS paidAt,
+            o.session_id AS sessionId,
+            u.id AS cashierId,
+            u.first_name AS cashierFirstName,
+            u.last_name AS cashierLastName,
+            c.id AS customerId,
+            c.first_name AS customerFirstName,
+            c.last_name AS customerLastName,
+            c.phone AS customerPhone,
+            o.status AS status,
+            COUNT(DISTINCT oi.id) AS itemCount,
+            o.subtotal AS subtotal,
+            o.discount_total AS discountAmount,
+            o.tax_total AS taxAmount,
+            o.grand_total AS grandTotal,
+            CASE 
+                WHEN COUNT(DISTINCT p.id) > 1 THEN 'SPLIT'
+                WHEN COUNT(DISTINCT p.id) = 1 THEN MAX(p.method)
+                ELSE 'UNKNOWN'
+            END AS paymentMethod,
+            COUNT(DISTINCT p.id) AS paymentCount
+        FROM orders o
+        INNER JOIN sessions s ON s.id = o.session_id
+        INNER JOIN users u ON u.id = s.user_id
+        LEFT JOIN customers c ON c.id = o.customer_id
+        LEFT JOIN payments p ON p.order_id = o.id AND p.type = 'PAYMENT'
+        LEFT JOIN order_items oi ON oi.order_id = o.id
+        WHERE o.status = COALESCE(:status, 'PAID')
+          AND (
+            (:fromDate IS NULL AND :toDate IS NULL)
+            OR (COALESCE(o.paid_at, o.created_at)::date >= COALESCE(:fromDate, '1900-01-01'::date))
+            AND (COALESCE(o.paid_at, o.created_at)::date <= COALESCE(:toDate, '9999-12-31'::date))
+          )
+          AND (:cashierName IS NULL OR CONCAT(u.first_name, ' ', COALESCE(u.last_name, '')) ILIKE CONCAT('%', :cashierName, '%'))
+          AND (:cashierId IS NULL OR u.id = :cashierId)
+        GROUP BY o.id, o.order_number, o.created_at, o.paid_at, o.session_id, 
+                 u.id, u.first_name, u.last_name, c.id, c.first_name, c.last_name, 
+                 c.phone, o.status, o.subtotal, o.discount_total, o.tax_total, o.grand_total
+        ORDER BY 
+            CASE WHEN :orderBy = 'date' AND :orderDirection = 'ASC' THEN COALESCE(o.paid_at, o.created_at) END ASC,
+            CASE WHEN :orderBy = 'date' AND :orderDirection = 'DESC' THEN COALESCE(o.paid_at, o.created_at) END DESC,
+            CASE WHEN :orderBy = 'total' AND :orderDirection = 'ASC' THEN o.grand_total END ASC,
+            CASE WHEN :orderBy = 'total' AND :orderDirection = 'DESC' THEN o.grand_total END DESC,
+            CASE WHEN :orderBy = 'cashier' AND :orderDirection = 'ASC' THEN CONCAT(u.first_name, ' ', COALESCE(u.last_name, '')) END ASC,
+            CASE WHEN :orderBy = 'cashier' AND :orderDirection = 'DESC' THEN CONCAT(u.first_name, ' ', COALESCE(u.last_name, '')) END DESC,
+            COALESCE(o.paid_at, o.created_at) DESC
+        LIMIT :limit OFFSET :offset
+        """, nativeQuery = true)
+    List<OrderReportProjection> findOrderReport(
+            @Param("status") String status,
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate,
+            @Param("cashierName") String cashierName,
+            @Param("cashierId") Long cashierId,
+            @Param("orderBy") String orderBy,
+            @Param("orderDirection") String orderDirection,
+            @Param("limit") Integer limit,
+            @Param("offset") Integer offset
+    );
+
+    /**
+     * Count total orders matching the report filters (for pagination)
+     */
+    @Query(value = """
+        SELECT COUNT(DISTINCT o.id)
+        FROM orders o
+        INNER JOIN sessions s ON s.id = o.session_id
+        INNER JOIN users u ON u.id = s.user_id
+        WHERE o.status = COALESCE(:status, 'PAID')
+          AND (
+            (:fromDate IS NULL AND :toDate IS NULL)
+            OR (COALESCE(o.paid_at, o.created_at)::date >= COALESCE(:fromDate, '1900-01-01'::date))
+            AND (COALESCE(o.paid_at, o.created_at)::date <= COALESCE(:toDate, '9999-12-31'::date))
+          )
+          AND (:cashierName IS NULL OR CONCAT(u.first_name, ' ', COALESCE(u.last_name, '')) ILIKE CONCAT('%', :cashierName, '%'))
+          AND (:cashierId IS NULL OR u.id = :cashierId)
+        """, nativeQuery = true)
+    Long countOrderReport(
+            @Param("status") String status,
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate,
+            @Param("cashierName") String cashierName,
+            @Param("cashierId") Long cashierId
+    );
+
+    /**
+     * Sum total discount amount for PAID orders in period
+     */
+    @Query(value = """
+        SELECT COALESCE(SUM(discount_total), 0)
+        FROM orders
+        WHERE status = 'PAID'
+          AND paid_at >= :from
+          AND paid_at <= :to
+        """, nativeQuery = true)
+    BigDecimal sumDiscountSince(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /**
+     * Sum total tax amount for PAID orders in period
+     */
+    @Query(value = """
+        SELECT COALESCE(SUM(tax_total), 0)
+        FROM orders
+        WHERE status = 'PAID'
+          AND paid_at >= :from
+          AND paid_at <= :to
+        """, nativeQuery = true)
+    BigDecimal sumTaxSince(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /**
+     * Get earliest order date
+     */
+    @Query(value = """
+        SELECT MIN(COALESCE(paid_at, created_at))::date
+        FROM orders
+        WHERE status = 'PAID'
+        """, nativeQuery = true)
+    LocalDate getEarliestOrderDate();
+
+    /**
+     * Get latest order date
+     */
+    @Query(value = """
+        SELECT MAX(COALESCE(paid_at, created_at))::date
+        FROM orders
+        WHERE status = 'PAID'
+        """, nativeQuery = true)
+    LocalDate getLatestOrderDate();
 }

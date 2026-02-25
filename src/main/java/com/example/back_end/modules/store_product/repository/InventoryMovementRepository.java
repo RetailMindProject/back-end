@@ -185,6 +185,8 @@ public interface InventoryMovementRepository extends JpaRepository<InventoryMove
     List<InventoryMovement> findByProductIdWithBatches(@Param("productId") Long productId);
 
     // Get waste history with filters
+    // Note: ORDER BY is handled by Spring Data JPA via Pageable.sort
+    // The sort field should be "moved_at" (database column name)
     @Query(value = """
         SELECT 
             im.id as movementId,
@@ -209,8 +211,10 @@ public interface InventoryMovementRepository extends JpaRepository<InventoryMove
         AND (CAST(:batchId AS BIGINT) IS NULL OR ib.id = CAST(:batchId AS BIGINT))
         AND (CAST(:fromDate AS TIMESTAMPTZ) IS NULL OR im.moved_at >= CAST(:fromDate AS TIMESTAMPTZ))
         AND (CAST(:toDate AS TIMESTAMPTZ) IS NULL OR im.moved_at <= CAST(:toDate AS TIMESTAMPTZ))
-        AND (CAST(:wasteReason AS TEXT) IS NULL OR im.note ILIKE CONCAT('%', CAST(:wasteReason AS TEXT), '%'))
-        ORDER BY im.moved_at DESC
+        AND (CAST(:wasteReason AS TEXT) IS NULL 
+             OR UPPER(TRIM(im.note)) = UPPER(TRIM(CAST(:wasteReason AS TEXT)))
+             OR im.note ILIKE CONCAT('Waste Reason: ', CAST(:wasteReason AS TEXT))
+             OR im.note ILIKE CONCAT('%Waste Reason: ', CAST(:wasteReason AS TEXT), '%'))
         """,
         countQuery = """
         SELECT COUNT(*)
@@ -222,7 +226,10 @@ public interface InventoryMovementRepository extends JpaRepository<InventoryMove
         AND (CAST(:batchId AS BIGINT) IS NULL OR ib.id = CAST(:batchId AS BIGINT))
         AND (CAST(:fromDate AS TIMESTAMPTZ) IS NULL OR im.moved_at >= CAST(:fromDate AS TIMESTAMPTZ))
         AND (CAST(:toDate AS TIMESTAMPTZ) IS NULL OR im.moved_at <= CAST(:toDate AS TIMESTAMPTZ))
-        AND (CAST(:wasteReason AS TEXT) IS NULL OR im.note ILIKE CONCAT('%', CAST(:wasteReason AS TEXT), '%'))
+        AND (CAST(:wasteReason AS TEXT) IS NULL 
+             OR UPPER(TRIM(im.note)) = UPPER(TRIM(CAST(:wasteReason AS TEXT)))
+             OR im.note ILIKE CONCAT('Waste Reason: ', CAST(:wasteReason AS TEXT))
+             OR im.note ILIKE CONCAT('%Waste Reason: ', CAST(:wasteReason AS TEXT), '%'))
         """,
         nativeQuery = true)
     Page<WasteHistoryProjection> findWasteHistory(
@@ -233,4 +240,5 @@ public interface InventoryMovementRepository extends JpaRepository<InventoryMove
         @Param("wasteReason") String wasteReason,
         Pageable pageable
     );
+
 }
