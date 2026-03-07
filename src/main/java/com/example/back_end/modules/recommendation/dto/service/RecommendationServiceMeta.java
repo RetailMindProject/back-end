@@ -6,25 +6,49 @@ import lombok.Data;
 @Data
 public class RecommendationServiceMeta {
 
-    @JsonProperty("top_k")
+    @JsonProperty("topK")
     private Integer topK;
 
-    @JsonProperty("num_for_you")
-    private Integer numForYou;
+    @JsonProperty("candidateLimit")
+    private Integer candidateLimit;
 
-    @JsonProperty("num_popular")
+    @JsonProperty("numRecommendedForYou")
+    private Integer numRecommendedForYou;
+
+    @JsonProperty("numPopular")
     private Integer numPopular;
 
-    @JsonProperty("num_offers")
+    @JsonProperty("numOffers")
     private Integer numOffers;
 
-    @JsonProperty("is_cold_start")
+    @JsonProperty("userSegment")
+    private String userSegment; // "warm", "stale", "new_user"
+
+    @JsonProperty("isColdStart")
     private Boolean isColdStart;
 
-    @JsonProperty("is_stale")
+    @JsonProperty("isStale")
     private Boolean isStale;
 
-    @JsonProperty("user_segment")
-    private String userSegment;
+    @JsonProperty("daysSinceLastEvent")
+    private Integer daysSinceLastEvent;
+
+    @JsonProperty("minHistoryForPersonalization")
+    private Integer minHistoryForPersonalization;
+
+    @JsonProperty("staleDays")
+    private Integer staleDays;
+
+    @JsonProperty("recencyTauDays")
+    private Double recencyTauDays;
+
+    @JsonProperty("categoryAffinityBeta")
+    private Double categoryAffinityBeta;
+
+    @JsonProperty("popularityBlendDisabled")
+    private Boolean popularityBlendDisabled;
+
+    @JsonProperty("minOffersK")
+    private Integer minOffersK;
 }
 

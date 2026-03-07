@@ -34,15 +34,19 @@ public class RecommendationsGatewayController {
             @RequestParam(name = "inStockOnly", defaultValue = "true") boolean inStockOnly,
             @RequestHeader(name = "Authorization", required = false) String authorizationHeader
     ) {
+        log.info("========================================");
+        log.info("RECOMMENDATION REQUEST STARTED");
+        log.info("========================================");
+
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
         // Step 1: Extract userId from JWT
         Long userId = extractUserId(authentication, authorizationHeader);
-        log.debug("Extracted userId from JWT: {}", userId);
+        log.info("✅ [DEBUG-1] Extracted userId from JWT: {}", userId);
 
         // Step 2: Convert userId to customerId by looking up customers table
         Integer customerId = convertUserIdToCustomerId(userId);
-        log.debug("Converted userId {} to customerId {}", userId, customerId);
+        log.info("✅ [DEBUG-2] Converted userId {} to customerId {}", userId, customerId);
 
         int safeTopK = Math.min(Math.max(topK, 1), 100);
         int safeCandidateLimit = Math.min(Math.max(candidateLimit, 1), 2000);
@@ -50,8 +54,52 @@ public class RecommendationsGatewayController {
         String bearerToken = resolveBearerToken(authorizationHeader, authentication);
 
         // Step 3: Call recommendation service with actual customerId from customers table
+        log.info("🔄 [DEBUG-3] Calling recommendation service for customerId: {}", customerId);
         RecommendationsResponseDTO body = recommendationsGatewayService
                 .getRecommendations(customerId.longValue(), bearerToken, safeTopK, safeCandidateLimit, inStockOnly);
+
+        // DEBUG LOGGING: Log the full response details
+        log.info("========================================");
+        log.info("RESPONSE DIAGNOSIS");
+        log.info("========================================");
+        log.info("📊 [DEBUG-4] Response Status: {}", body.getStatus());
+
+        if (body.getMeta() != null) {
+            log.info("📊 [DEBUG-5] Meta - userSegment: {}", body.getMeta().getUserSegment());
+            log.info("📊 [DEBUG-6] Meta - historyLen: {}", body.getMeta().getHistoryLen());
+        } else {
+            log.warn("⚠️ [DEBUG-5-6] Meta is NULL!");
+        }
+
+        if (body.getRows() != null) {
+            int recommendedForYouSize = body.getRows().getRecommendedForYou() != null ? body.getRows().getRecommendedForYou().size() : 0;
+            int popularSize = body.getRows().getPopular() != null ? body.getRows().getPopular().size() : 0;
+            int offersSize = body.getRows().getOffers() != null ? body.getRows().getOffers().size() : 0;
+
+            log.info("📊 [DEBUG-7] Rows - recommendedForYou: {} items", recommendedForYouSize);
+            log.info("📊 [DEBUG-8] Rows - popular: {} items", popularSize);
+            log.info("📊 [DEBUG-9] Rows - offers: {} items", offersSize);
+        } else {
+            log.warn("⚠️ [DEBUG-7-8-9] Rows is NULL!");
+        }
+
+        // Log the complete JSON structure (using toString which will show all fields)
+        log.info("========================================");
+        log.info("EXACT JSON RESPONSE (before serialization):");
+        log.info("========================================");
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            mapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+            String jsonResponse = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(body);
+            log.info("📄 [DEBUG-10] JSON Response:\n{}", jsonResponse);
+        } catch (Exception e) {
+            log.error("Failed to serialize response to JSON for logging: {}", e.getMessage());
+            log.info("📄 [DEBUG-10] Response toString: {}", body);
+        }
+
+        log.info("========================================");
+        log.info("RECOMMENDATION REQUEST COMPLETED");
+        log.info("========================================");
 
         return ResponseEntity.ok(body);
     }

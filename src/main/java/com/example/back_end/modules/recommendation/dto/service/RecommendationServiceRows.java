@@ -8,8 +8,8 @@ import java.util.List;
 @Data
 public class RecommendationServiceRows {
 
-    @JsonProperty("for_you")
-    private List<RecommendationServiceItem> forYou;
+    @JsonProperty("recommendedForYou")
+    private List<RecommendationServiceItem> recommendedForYou;
 
     private List<RecommendationServiceItem> popular;
 

@@ -1,6 +1,7 @@
 package com.example.back_end.modules.auth.service;
 
 import com.example.back_end.exception.CustomException;
+import com.example.back_end.modules.auth.exception.DuplicateEmailRecoveryException;
 import com.example.back_end.modules.auth.entity.PendingRegistration;
 import com.example.back_end.modules.auth.repository.PendingRegistrationRepository;
 import com.example.back_end.modules.register.dto.RegisterRequestDTO;
@@ -199,7 +200,7 @@ public class PendingRegistrationService {
      * @param token Plain text verification token from email
      * @return Response with user data and JWT token
      */
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public RegisterResponseDTO completeRegistration(String token) {
         log.info("=== STARTING REGISTRATION COMPLETION ===");
         log.info("Token received - length: {}, last 8 chars: {}",
@@ -260,10 +261,53 @@ public class PendingRegistrationService {
                      hoursRemaining, minutesRemaining % 60);
 
             // Double-check email doesn't exist (race condition protection)
-            boolean emailExists = userRepository.existsByEmail(pending.getEmail());
-            if (emailExists) {
+            // Using findByEmail to get a more reliable check with pessimistic locking
+            Optional<User> existingUserOpt = userRepository.findByEmail(pending.getEmail());
+            if (existingUserOpt.isPresent()) {
+                User existingUser = existingUserOpt.get();
                 log.warn("Step 4 FAILED: Email already exists in users table: {}", pending.getEmail());
+                log.warn("  Existing user ID: {}, Created at: {}, Email verified: {}",
+                         existingUser.getId(), existingUser.getCreatedAt(), existingUser.getEmailVerified());
+
+                // Delete the pending registration since the account already exists
                 pendingRegistrationRepository.delete(pending);
+
+                // Check if this is the same user who just completed verification
+                // If email is verified and created very recently (within last 5 minutes), this might be a duplicate request
+                if (Boolean.TRUE.equals(existingUser.getEmailVerified()) &&
+                    existingUser.getCreatedAt() != null &&
+                    existingUser.getCreatedAt().isAfter(LocalDateTime.now().minusMinutes(5))) {
+
+                    log.info("User was recently created and verified - this appears to be a duplicate verification request");
+                    log.info("Returning success with existing user data instead of failing");
+
+                    // Check if customer exists
+                    Optional<Customer> existingCustomerOpt = customerRepository.findByUserId(existingUser.getId());
+                    if (existingCustomerOpt.isEmpty()) {
+                        log.warn("User exists but customer record is missing - creating customer record");
+                        Customer customer = new Customer();
+                        customer.setFirstName(existingUser.getFirstName());
+                        customer.setLastName(existingUser.getLastName());
+                        customer.setPhone(existingUser.getPhone());
+                        customer.setEmail(existingUser.getEmail());
+                        customer.setLastVisitedAt(LocalDateTime.now());
+                        customer.setUserId(existingUser.getId());
+                        customerRepository.save(customer);
+                    }
+
+                    // Generate JWT token for existing user
+                    String jwtToken = jwtService.generateToken(
+                            existingUser.getEmail(),
+                            existingUser.getRole().name(),
+                            existingUser.getId(),
+                            existingUser.getFirstName(),
+                            existingUser.getLastName()
+                    );
+
+                    // Return success response with existing user
+                    return userMapper.toRegisterResponseDTO(existingUser, jwtToken);
+                }
+
                 throw new CustomException("Email already registered");
             }
             log.info("Step 4: Email not found in users table - proceeding with account creation");
@@ -295,6 +339,21 @@ public class PendingRegistrationService {
 
                 log.info("Step 6 COMPLETE: User saved - ID: {}, email: {}, isActive: {}, emailVerified: {}",
                     savedUser.getId(), savedUser.getEmail(), savedUser.getIsActive(), savedUser.getEmailVerified());
+            } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                log.error("Step 6 FAILED: DataIntegrityViolationException - duplicate key or constraint violation", e);
+
+                // Check if this is a duplicate email error
+                String errorMessage = e.getMessage();
+                if (errorMessage != null && errorMessage.contains("users_email_key")) {
+                    log.error("Duplicate email detected during user creation: {}", pending.getEmail());
+
+                    // CRITICAL: We cannot call recovery here because PostgreSQL marks the transaction as aborted
+                    // We need to let this transaction rollback and handle recovery outside
+                    // Throw a special exception with the email so it can be recovered outside the transaction
+                    throw new DuplicateEmailRecoveryException(pending.getEmail());
+                }
+
+                throw new CustomException("Failed to create user account - email may already be registered: " + e.getMessage());
             } catch (Exception e) {
                 log.error("Step 6 FAILED: Exception during user save", e);
                 log.error("Exception type: {}", e.getClass().getName());
@@ -399,6 +458,79 @@ public class PendingRegistrationService {
             log.error("Error type: {}", e.getClass().getName());
             log.error("Error message: {}", e.getMessage(), e);
             throw new CustomException("Unexpected error during registration: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Handle recovery from duplicate user creation (race condition).
+     * This method is called OUTSIDE of any transaction to avoid PostgreSQL's
+     * "current transaction is aborted" error.
+     * It will create its own new transaction when called.
+     *
+     * @param email Email of the user that already exists
+     * @return RegisterResponseDTO with existing user data and JWT token
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public RegisterResponseDTO handleDuplicateUserRecovery(String email) {
+        log.info("=== HANDLING DUPLICATE USER RECOVERY ===");
+        log.info("Email: {}", email);
+
+        try {
+            // Find the existing user
+            Optional<User> existingUserOpt = userRepository.findByEmail(email);
+            if (existingUserOpt.isEmpty()) {
+                log.error("Expected to find existing user but none found for email: {}", email);
+                throw new CustomException("Registration failed - please try again");
+            }
+
+            User existingUser = existingUserOpt.get();
+            log.info("Found existing user - ID: {}, Created: {}, Verified: {}",
+                     existingUser.getId(), existingUser.getCreatedAt(), existingUser.getEmailVerified());
+
+            // Clean up any pending registration for this email
+            Optional<PendingRegistration> pendingOpt = pendingRegistrationRepository.findByEmail(email);
+            if (pendingOpt.isPresent()) {
+                log.info("Deleting pending registration for email: {}", email);
+                pendingRegistrationRepository.delete(pendingOpt.get());
+            }
+
+            // Ensure customer record exists
+            Optional<Customer> existingCustomerOpt = customerRepository.findByUserId(existingUser.getId());
+            if (existingCustomerOpt.isEmpty()) {
+                log.warn("Customer record missing for user ID {} - creating now", existingUser.getId());
+                Customer customer = new Customer();
+                customer.setFirstName(existingUser.getFirstName());
+                customer.setLastName(existingUser.getLastName());
+                customer.setPhone(existingUser.getPhone());
+                customer.setEmail(existingUser.getEmail());
+                customer.setLastVisitedAt(LocalDateTime.now());
+                customer.setUserId(existingUser.getId());
+                customerRepository.save(customer);
+                log.info("Customer record created for user ID {}", existingUser.getId());
+            } else {
+                log.info("Customer record already exists for user ID {}", existingUser.getId());
+            }
+
+            // Generate JWT token
+            String jwtToken = jwtService.generateToken(
+                    existingUser.getEmail(),
+                    existingUser.getRole().name(),
+                    existingUser.getId(),
+                    existingUser.getFirstName(),
+                    existingUser.getLastName()
+            );
+
+            log.info("=== DUPLICATE USER RECOVERY SUCCESSFUL ===");
+
+            // Return success response with existing user
+            return userMapper.toRegisterResponseDTO(existingUser, jwtToken);
+
+        } catch (CustomException e) {
+            log.error("Recovery failed with CustomException: {}", e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.error("Recovery failed with unexpected exception: {}", e.getMessage(), e);
+            throw new CustomException("Failed to complete registration recovery: " + e.getMessage());
         }
     }
 

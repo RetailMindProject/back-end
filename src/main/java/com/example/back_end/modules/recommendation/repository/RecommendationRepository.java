@@ -45,7 +45,9 @@ public class RecommendationRepository {
                     rs.getString("category_name"),
                     rs.getString("type"),
                     rs.getBigDecimal("current_price"),
-                    rs.getBigDecimal("total_qty")
+                    rs.getBigDecimal("total_qty"),
+                    rs.getString("image_url"),     // Image URL from view
+                    rs.getString("image_alt")      // Alt text from view
             );
         }
     };
@@ -161,7 +163,7 @@ public class RecommendationRepository {
 
     public List<ProductCandidateDTO> findProductCandidates(int limit, boolean inStockOnly) {
         String sql = """
-            SELECT product_id, sku, name, category_name, type, current_price, total_qty
+            SELECT product_id, sku, name, category_name, type, current_price, total_qty, image_url, image_alt
             FROM public.v_reco_product_catalog
             WHERE (NOT ?) OR (total_qty > 0)
             ORDER BY product_id
