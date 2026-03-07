@@ -91,6 +91,21 @@ public class EmailVerificationController {
             RegisterResponseDTO response = pendingRegistrationService.completeRegistration(request.getToken());
             log.info("Registration verification successful for user: {}", response.getEmail());
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (com.example.back_end.modules.auth.exception.DuplicateEmailRecoveryException e) {
+            // Duplicate email detected - transaction was rolled back
+            // Now we can safely recover in a new transaction
+            log.warn("Duplicate email detected, attempting recovery: {}", e.getEmail());
+            try {
+                RegisterResponseDTO response = pendingRegistrationService.handleDuplicateUserRecovery(e.getEmail());
+                log.info("Recovery successful for user: {}", response.getEmail());
+                return ResponseEntity.status(HttpStatus.CREATED).body(response);
+            } catch (Exception recoveryException) {
+                log.error("Recovery failed: {}", recoveryException.getMessage(), recoveryException);
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("message", "Registration failed. Please try again.");
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+            }
         } catch (CustomException e) {
             log.error("Registration verification failed - CustomException: {}", e.getMessage());
             Map<String, Object> errorResponse = new HashMap<>();

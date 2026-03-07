@@ -17,4 +17,8 @@ public class ProductCandidateDTO {
     private String type;
     private BigDecimal currentPrice;
     private BigDecimal totalQty;
+
+    // Image support for recommendation UI
+    private String imageUrl;  // Absolute URL to product image
+    private String imageAlt;  // Alt text for accessibility
 }

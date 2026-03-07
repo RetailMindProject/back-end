@@ -1,6 +1,7 @@
 package com.example.back_end.modules.recommendation.service;
 
 import com.example.back_end.modules.catalog.product.entity.Product;
+import com.example.back_end.modules.catalog.product.entity.ProductMedia;
 import com.example.back_end.modules.catalog.product.repository.ProductRepository;
 import com.example.back_end.modules.offer.entity.Offer;
 import com.example.back_end.modules.offer.repository.OfferRepository;
@@ -62,85 +63,161 @@ public class RecommendationsGatewayService {
                     .block();
 
             if (serviceResponse == null) {
-                log.warn("Recommendation service unavailable or returned null - using database fallback for customer {}", customerId);
-                return createFallbackWithDatabaseOffers(customerId, topK);
+                log.warn("Recommendation service unavailable or returned null - returning error response for customer {}", customerId);
+                return createErrorResponse();
             }
+
+            // DESERIALIZATION VERIFICATION LOG
+            log.info("╔══════════════════════════════════════════════════════════════╗");
+            log.info("║  DESERIALIZATION VERIFICATION (RAW JSON → DTO)              ║");
+            log.info("╚══════════════════════════════════════════════════════════════╝");
+            if (serviceResponse.getRows() != null) {
+                int recommendedForYouSize = serviceResponse.getRows().getRecommendedForYou() != null ? serviceResponse.getRows().getRecommendedForYou().size() : 0;
+                int popularSize = serviceResponse.getRows().getPopular() != null ? serviceResponse.getRows().getPopular().size() : 0;
+                int offersSize = serviceResponse.getRows().getOffers() != null ? serviceResponse.getRows().getOffers().size() : 0;
+                log.info("✅ [DESER-1] Deserialized rows.recommendedForYou: {} items", recommendedForYouSize);
+                log.info("✅ [DESER-2] Deserialized rows.popular: {} items", popularSize);
+                log.info("✅ [DESER-3] Deserialized rows.offers: {} items", offersSize);
+            } else {
+                log.warn("⚠️ [DESER-1-2-3] Deserialized rows is NULL!");
+            }
+            if (serviceResponse.getMeta() != null) {
+                log.info("✅ [DESER-4] Deserialized meta.isColdStart: {}", serviceResponse.getMeta().getIsColdStart());
+                log.info("✅ [DESER-5] Deserialized meta.userSegment: {}", serviceResponse.getMeta().getUserSegment());
+                log.info("✅ [DESER-6] Deserialized meta.numRecommendedForYou: {}", serviceResponse.getMeta().getNumRecommendedForYou());
+                log.info("✅ [DESER-7] Deserialized meta.topK: {}", serviceResponse.getMeta().getTopK());
+            } else {
+                log.warn("⚠️ [DESER-4-7] Deserialized meta is NULL!");
+            }
+            log.info("═══════════════════════════════════════════════════════════════");
 
             return mapToFrontend(customerId, serviceResponse);
         } catch (Exception ex) {
-            log.warn("Failed to fetch recommendations for customer {}: {} - using database fallback",
+            log.warn("Failed to fetch recommendations for customer {}: {} - returning error response",
                      customerId, ex.getMessage());
-            return createFallbackWithDatabaseOffers(customerId, topK);
+            return createErrorResponse();
         }
     }
 
     private RecommendationsResponseDTO mapToFrontend(Long customerId, RecommendationServiceResponse serviceResponse) {
-        // Logging for debugging empty recommendations
-        log.info("=== Recommendation Service Response for customerId {} (from customers table) ===", customerId);
-        log.info("Status: {}", serviceResponse.getStatus());
+        log.info("╔══════════════════════════════════════════════════════════════╗");
+        log.info("║  MAPPING DIAGNOSIS: Recommendation Service → Frontend       ║");
+        log.info("╚══════════════════════════════════════════════════════════════╝");
+        log.info("🔍 [SERVICE-MAP-1] CustomerId: {}", customerId);
+        log.info("🔍 [SERVICE-MAP-2] Service Response Status: {}", serviceResponse.getStatus());
 
         RecommendationServiceRows serviceRows = serviceResponse.getRows();
+        RecommendationServiceMeta serviceMeta = serviceResponse.getMeta();
+
+        // Log RAW data from recommendation service
+        log.info("─────────────────────────────────────────────────────────────");
+        log.info("📥 RAW DATA FROM RECOMMENDATION SERVICE:");
+        log.info("─────────────────────────────────────────────────────────────");
+
         if (serviceRows != null) {
-            int forYouCount = serviceRows.getForYou() != null ? serviceRows.getForYou().size() : 0;
+            int recommendedForYouCount = serviceRows.getRecommendedForYou() != null ? serviceRows.getRecommendedForYou().size() : 0;
             int popularCount = serviceRows.getPopular() != null ? serviceRows.getPopular().size() : 0;
             int offersCount = serviceRows.getOffers() != null ? serviceRows.getOffers().size() : 0;
-
-            log.info("Rows - For You: {}, Popular: {}, Offers: {}", forYouCount, popularCount, offersCount);
-
-            if (serviceRows.getForYou() != null && serviceRows.getForYou().isEmpty()) {
-                log.warn("⚠️  WARNING: for_you array is EMPTY for customerId {}", customerId);
-            }
+            log.info("🔍 [SERVICE-MAP-3] Service Rows.recommendedForYou: {} items", recommendedForYouCount);
+            log.info("🔍 [SERVICE-MAP-4] Service Rows.popular: {} items", popularCount);
+            log.info("🔍 [SERVICE-MAP-5] Service Rows.offers: {} items", offersCount);
         } else {
-            log.warn("⚠️  WARNING: serviceRows is NULL for customerId {}", customerId);
+            log.warn("⚠️ [SERVICE-MAP-3-4-5] Service Rows is NULL!");
         }
 
-        RecommendationServiceMeta serviceMeta = serviceResponse.getMeta();
         if (serviceMeta != null) {
-            log.info("Meta - Cold Start: {}, Stale: {}, User Segment: {}",
-                     serviceMeta.getIsColdStart(),
-                     serviceMeta.getIsStale(),
-                     serviceMeta.getUserSegment());
-            log.info("Meta - Counts - For You: {}, Popular: {}, Offers: {}",
-                     serviceMeta.getNumForYou(),
-                     serviceMeta.getNumPopular(),
-                     serviceMeta.getNumOffers());
+            log.info("🔍 [SERVICE-MAP-6] Service Meta.isColdStart: {}", serviceMeta.getIsColdStart());
+            log.info("🔍 [SERVICE-MAP-7] Service Meta.numRecommendedForYou: {}", serviceMeta.getNumRecommendedForYou());
+            log.info("🔍 [SERVICE-MAP-8] Service Meta.userSegment: {}", serviceMeta.getUserSegment());
+            log.info("🔍 [SERVICE-MAP-9] Service Meta.topK: {}", serviceMeta.getTopK());
         } else {
-            log.warn("⚠️  WARNING: serviceMeta is NULL for customerId {}", customerId);
+            log.warn("⚠️ [SERVICE-MAP-6-9] Service Meta is NULL!");
         }
-        log.info("=== End of Recommendation Service Response ===");
 
+        // Build response according to frontend requirements
         RecommendationsResponseDTO dto = new RecommendationsResponseDTO();
         dto.setStatus(serviceResponse.getStatus());
-        dto.setUserId(customerId);
+
+        // Map rows: recommendedForYou → recommendedForYou, popular → popular, offers → offers
+        log.info("─────────────────────────────────────────────────────────────");
+        log.info("🔄 FIELD NAME MAPPING:");
+        log.info("─────────────────────────────────────────────────────────────");
 
         RecommendationRowsDTO rows = new RecommendationRowsDTO();
         if (serviceRows != null) {
-            rows.setForYou(mapItems(serviceRows.getForYou()));
-            rows.setPopular(mapItems(serviceRows.getPopular()));
+            List<RecommendationItemDTO> recommendedForYouList = mapItems(serviceRows.getRecommendedForYou());
+            List<RecommendationItemDTO> popularList = mapItems(serviceRows.getPopular());
 
-            // معالجة خاصة لقائمة offers: تصفية وإكمال
+            rows.setRecommendedForYou(recommendedForYouList);
+            rows.setPopular(popularList);
+
+            log.info("✅ [SERVICE-MAP-10] Mapped: service.rows.recommendedForYou → dto.rows.recommendedForYou ({} items)", recommendedForYouList.size());
+            log.info("✅ [SERVICE-MAP-11] Mapped: service.rows.popular → dto.rows.popular ({} items)", popularList.size());
+
+            // Filter and complete offers
             int topK = (serviceMeta != null && serviceMeta.getTopK() != null)
                         ? serviceMeta.getTopK()
                         : 10;
-            rows.setOffers(filterAndCompleteOffers(serviceRows.getOffers(), topK));
+            List<RecommendationItemDTO> offersList = filterAndCompleteOffers(serviceRows.getOffers(), topK);
+            rows.setOffers(offersList);
+            log.info("✅ [SERVICE-MAP-12] Mapped: service.rows.offers → dto.rows.offers ({} items)", offersList.size());
         } else {
-            rows.setForYou(Collections.emptyList());
+            // MUST guarantee all arrays are present
+            rows.setRecommendedForYou(Collections.emptyList());
             rows.setPopular(Collections.emptyList());
             rows.setOffers(Collections.emptyList());
+            log.warn("⚠️ [SERVICE-MAP-10-12] Service rows NULL - using empty arrays");
         }
         dto.setRows(rows);
 
+        // Map meta: determine userSegment based on isColdStart
+        log.info("─────────────────────────────────────────────────────────────");
+        log.info("🎯 USER SEGMENTATION LOGIC:");
+        log.info("─────────────────────────────────────────────────────────────");
+
         RecommendationMetaDTO meta = new RecommendationMetaDTO();
         if (serviceMeta != null) {
-            meta.setTopK(serviceMeta.getTopK());
-            meta.setNumForYou(serviceMeta.getNumForYou());
-            meta.setNumPopular(serviceMeta.getNumPopular());
-            meta.setNumOffers(serviceMeta.getNumOffers());
-            meta.setIsColdStart(serviceMeta.getIsColdStart());
-            meta.setIsStale(serviceMeta.getIsStale());
-            meta.setUserSegment(serviceMeta.getUserSegment());
+            // Derive history length from isColdStart and numRecommendedForYou
+            // Per spec: isColdStart = true if purchase count < 3
+            // So: isColdStart = false means historyLen >= 3
+            Boolean isColdStart = serviceMeta.getIsColdStart();
+            Integer numRecommended = serviceMeta.getNumRecommendedForYou();
+            int minHistoryThreshold = serviceMeta.getMinHistoryForPersonalization() != null
+                    ? serviceMeta.getMinHistoryForPersonalization() : 3;
+
+            int historyLen;
+            String userSegment;
+
+            if (Boolean.FALSE.equals(isColdStart)) {
+                // User has >= minHistoryThreshold purchases (e.g., >= 3)
+                historyLen = Math.max(minHistoryThreshold, numRecommended != null ? numRecommended : minHistoryThreshold);
+                userSegment = "existing";
+                log.info("🔍 [SERVICE-MAP-13] isColdStart=false → User is WARM/STALE (historyLen >= {})", minHistoryThreshold);
+            } else {
+                // User has < minHistoryThreshold purchases (e.g., < 3)
+                historyLen = 0;
+                userSegment = "new";
+                log.info("🔍 [SERVICE-MAP-13] isColdStart=true → User is NEW (historyLen < {})", minHistoryThreshold);
+            }
+
+            log.info("🔍 [SERVICE-MAP-14] Business Rule: isColdStart={} → userSegment='{}', historyLen={}",
+                    isColdStart, userSegment, historyLen);
+
+            meta.setUserSegment(userSegment);
+            meta.setHistoryLen(historyLen);
+
+            log.info("✅ [SERVICE-MAP-15] Final Meta - userSegment: '{}', historyLen: {}", userSegment, historyLen);
+        } else {
+            // Default values if meta is null
+            meta.setUserSegment("new");
+            meta.setHistoryLen(0);
+            log.warn("⚠️ [SERVICE-MAP-13-15] Service meta NULL - using defaults: userSegment='new', historyLen=0");
         }
         dto.setMeta(meta);
+
+        log.info("╔══════════════════════════════════════════════════════════════╗");
+        log.info("║  MAPPING COMPLETED                                           ║");
+        log.info("╚══════════════════════════════════════════════════════════════╝");
 
         return dto;
     }
@@ -167,6 +244,11 @@ public class RecommendationsGatewayService {
         }
         dto.setBaseScore(item.getBaseScore());
         dto.setOfferBoost(item.getOfferBoost());
+
+        // Map image data if present
+        dto.setImageUrl(item.getImageUrl());
+        dto.setImageAlt(item.getImageAlt());
+
         return dto;
     }
 
@@ -356,6 +438,33 @@ public class RecommendationsGatewayService {
         }
         item.setCategoryName(categoryName);
 
+        // Get primary image or first available image
+        if (product.getProductMedia() != null && !product.getProductMedia().isEmpty()) {
+            // Try to find primary image first
+            ProductMedia primaryImage = product.getProductMedia().stream()
+                    .filter(pm -> pm.getIsPrimary() != null && pm.getIsPrimary())
+                    .findFirst()
+                    .orElse(null);
+
+            // If no primary, get first image sorted by sortOrder
+            if (primaryImage == null) {
+                primaryImage = product.getProductMedia().stream()
+                        .min((pm1, pm2) -> {
+                            int order1 = pm1.getSortOrder() != null ? pm1.getSortOrder() : 999;
+                            int order2 = pm2.getSortOrder() != null ? pm2.getSortOrder() : 999;
+                            return Integer.compare(order1, order2);
+                        })
+                        .orElse(null);
+            }
+
+            if (primaryImage != null && primaryImage.getMedia() != null) {
+                item.setImageUrl(primaryImage.getMedia().getUrl());
+                item.setImageAlt(primaryImage.getMedia().getAltText() != null
+                        ? primaryImage.getMedia().getAltText()
+                        : product.getName());
+            }
+        }
+
         // Default score for database items
         item.setScore(0.75);
         item.setBaseScore(0.75);
@@ -384,66 +493,29 @@ public class RecommendationsGatewayService {
     }
 
     /**
-     * Create fallback response with actual offers from database when recommendation service is unavailable.
-     * This provides a better user experience than returning empty lists.
+     * Create error response when recommendation service fails.
+     * Returns status="error" with empty arrays for all three row types.
+     * Frontend should handle this gracefully.
      *
-     * @param customerId Customer ID
-     * @param topK Target number of items
-     * @return Response with database offers
+     * @return Error response with empty data
      */
-    private RecommendationsResponseDTO createFallbackWithDatabaseOffers(Long customerId, int topK) {
-        log.info("Creating fallback response with database offers for customer {}", customerId);
+    private RecommendationsResponseDTO createErrorResponse() {
+        log.info("Creating error response - recommendation service unavailable");
 
-        RecommendationsResponseDTO dto = new RecommendationsResponseDTO();
-        dto.setStatus("success");
-        dto.setUserId(customerId);
-        dto.setMessage(null);
-
-        RecommendationRowsDTO rows = new RecommendationRowsDTO();
-
-        // Get products with active offers from database
-        List<RecommendationItemDTO> offersFromDb = getProductsWithActiveOffers(Collections.emptyList(), topK);
-
-        // Use offers for all three categories when service is down
-        rows.setForYou(offersFromDb.isEmpty() ? Collections.emptyList() : offersFromDb.subList(0, Math.min(offersFromDb.size(), topK)));
-        rows.setPopular(offersFromDb.isEmpty() ? Collections.emptyList() : offersFromDb.subList(0, Math.min(offersFromDb.size(), topK)));
-        rows.setOffers(offersFromDb);
-        dto.setRows(rows);
-
-        RecommendationMetaDTO meta = new RecommendationMetaDTO();
-        meta.setTopK(topK);
-        meta.setNumForYou(rows.getForYou().size());
-        meta.setNumPopular(rows.getPopular().size());
-        meta.setNumOffers(rows.getOffers().size());
-        meta.setIsColdStart(true); // Mark as cold start since we're using fallback
-        meta.setIsStale(false);
-        meta.setUserSegment("fallback");
-        dto.setMeta(meta);
-
-        log.info("Fallback response created with {} offers from database", offersFromDb.size());
-        return dto;
-    }
-
-    private RecommendationsResponseDTO createFallback(Long customerId, int topK) {
         RecommendationsResponseDTO dto = new RecommendationsResponseDTO();
         dto.setStatus("error");
-        dto.setUserId(customerId);
-        dto.setMessage("Recommendations temporarily unavailable");
 
+        // MUST guarantee all arrays are present, even in error state
         RecommendationRowsDTO rows = new RecommendationRowsDTO();
-        rows.setForYou(Collections.emptyList());
+        rows.setRecommendedForYou(Collections.emptyList());
         rows.setPopular(Collections.emptyList());
         rows.setOffers(Collections.emptyList());
         dto.setRows(rows);
 
+        // Meta with defaults for error state
         RecommendationMetaDTO meta = new RecommendationMetaDTO();
-        meta.setTopK(topK);
-        meta.setNumForYou(0);
-        meta.setNumPopular(0);
-        meta.setNumOffers(0);
-        meta.setIsColdStart(false);
-        meta.setIsStale(false);
-        meta.setUserSegment(null);
+        meta.setUserSegment("new");
+        meta.setHistoryLen(0);
         dto.setMeta(meta);
 
         return dto;
