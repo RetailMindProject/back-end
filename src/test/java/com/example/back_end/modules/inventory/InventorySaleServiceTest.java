@@ -25,8 +25,9 @@ class InventorySaleServiceTest {
     void applySaleOrder_decreasesStockAndCreatesMovement() {
         StockSnapshotRepository snapshotRepo = mock(StockSnapshotRepository.class);
         InventoryMovementRepository movementRepo = mock(InventoryMovementRepository.class);
+        com.example.back_end.modules.inventory.service.LowStockAlertService lowStockAlertService = mock(com.example.back_end.modules.inventory.service.LowStockAlertService.class);
 
-        InventorySaleService service = new InventorySaleService(snapshotRepo, movementRepo);
+        InventorySaleService service = new InventorySaleService(snapshotRepo, movementRepo, lowStockAlertService);
 
         Product p = new Product();
         p.setId(10L);
@@ -56,14 +57,16 @@ class InventorySaleServiceTest {
                         && m.getRefId().equals(100L)
                         && m.getQtyChange().compareTo(new BigDecimal("-2")) == 0
         ));
+        verify(lowStockAlertService).handleLowStock(eq(p), eq(new BigDecimal("5")), eq(new BigDecimal("3")), eq(100L));
     }
 
     @Test
     void applySaleOrder_outOfStock_rollsBackByThrowing() {
         StockSnapshotRepository snapshotRepo = mock(StockSnapshotRepository.class);
         InventoryMovementRepository movementRepo = mock(InventoryMovementRepository.class);
+        com.example.back_end.modules.inventory.service.LowStockAlertService lowStockAlertService = mock(com.example.back_end.modules.inventory.service.LowStockAlertService.class);
 
-        InventorySaleService service = new InventorySaleService(snapshotRepo, movementRepo);
+        InventorySaleService service = new InventorySaleService(snapshotRepo, movementRepo, lowStockAlertService);
 
         Product p = new Product();
         p.setId(10L);
@@ -87,6 +90,6 @@ class InventorySaleServiceTest {
 
         verify(movementRepo, never()).save(any(InventoryMovement.class));
         verify(snapshotRepo, never()).save(any(StockSnapshot.class));
+        verifyNoInteractions(lowStockAlertService);
     }
 }
-
