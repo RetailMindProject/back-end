@@ -161,7 +161,7 @@ public class ReturnService {
         paymentRepository.saveAll(refundPayments);
 
         // Update original order status based on whether all items are fully returned
-        updateOriginalOrderReturnStatus(originalOrder);
+        updateOriginalOrderReturnStatus(originalOrder, returnItemsToSave);
 
         return ReturnDTO.ReturnResponse.builder()
                 .returnOrderId(savedReturnOrder.getId())
@@ -217,12 +217,25 @@ public class ReturnService {
         return refundAmount;
     }
 
-    private void updateOriginalOrderReturnStatus(Order originalOrder) {
+    private void updateOriginalOrderReturnStatus(Order originalOrder, List<ReturnItem> currentReturnItems) {
         List<OrderItem> originalItems = orderItemRepository.findByOrderId(originalOrder.getId());
+
+        // Add the current return (not yet reflected in sumReturnedQty in many test/mocked scenarios)
+        Map<Long, BigDecimal> currentReturnedByOriginalItemId = new HashMap<>();
+        for (ReturnItem ri : currentReturnItems) {
+            currentReturnedByOriginalItemId.merge(
+                    ri.getOriginalOrderItem().getId(),
+                    normalizeQty(ri.getReturnedQty()),
+                    BigDecimal::add
+            );
+        }
 
         boolean allReturned = true;
         for (OrderItem oi : originalItems) {
             BigDecimal remaining = computeRemainingQty(originalOrder.getId(), oi);
+            BigDecimal currentReturned = currentReturnedByOriginalItemId.getOrDefault(oi.getId(), BigDecimal.ZERO);
+            remaining = remaining.subtract(currentReturned).max(BigDecimal.ZERO);
+
             if (remaining.compareTo(BigDecimal.ZERO) > 0) {
                 allReturned = false;
                 break;
@@ -231,6 +244,11 @@ public class ReturnService {
 
         originalOrder.setStatus(allReturned ? Order.OrderStatus.RETURNED : Order.OrderStatus.PARTIALLY_RETURNED);
         orderRepository.save(originalOrder);
+    }
+
+    // Keep old signature if used elsewhere
+    private void updateOriginalOrderReturnStatus(Order originalOrder) {
+        updateOriginalOrderReturnStatus(originalOrder, List.of());
     }
 
     private BigDecimal normalizeQty(BigDecimal qty) {

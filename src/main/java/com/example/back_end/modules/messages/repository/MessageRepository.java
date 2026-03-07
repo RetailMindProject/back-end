@@ -44,4 +44,15 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             "(m.toUser.id = :userId OR m.fromUser.id = :userId)")
     Optional<Message> findByIdAndUserAccess(@Param("messageId") Long messageId,
                                             @Param("userId") Integer userId);
+
+    @Query("""
+            SELECT COUNT(m) > 0
+            FROM Message m
+            WHERE m.toUser.id = :toUserId
+              AND m.status = com.example.back_end.modules.messages.entity.Message.MessageStatus.SENT
+              AND m.title = 'Low stock alert'
+              AND LOWER(m.body) LIKE LOWER(CONCAT('%[LOW_STOCK][productId=', :productId, ']%'))
+            """)
+    boolean existsUnreadLowStockAlert(@Param("toUserId") Integer toUserId,
+                                     @Param("productId") Long productId);
 }
