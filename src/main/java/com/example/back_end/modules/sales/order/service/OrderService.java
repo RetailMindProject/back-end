@@ -62,6 +62,7 @@ public class OrderService {
     private final CategoryOfferService categoryOfferService;
     private final BundleOfferService bundleOfferService;
     private final OfferEngine offerEngine;
+    private final com.example.back_end.modules.inventory.service.InventorySaleService inventorySaleService;
 
     /**
      * Create new order
@@ -329,6 +330,10 @@ public class OrderService {
         order.setStatus(Order.OrderStatus.PAID);
         order.setPaidAt(LocalDateTime.now());
         orderRepository.save(order);
+
+        // Apply inventory snapshot decrement + movement audit for SALE (STORE)
+        java.util.List<OrderItem> items = orderItemRepository.findByOrderId(order.getId());
+        inventorySaleService.applySaleOrder(order.getId(), items);
 
         return getOrderById(order.getId());
     }

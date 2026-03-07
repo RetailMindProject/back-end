@@ -112,6 +112,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/dashboard/inventory/**").hasAnyRole("INVENTORY_MANAGER", "CEO")
                         .requestMatchers("/api/forecasting/**").permitAll()
                         .requestMatchers("/api/reco/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/picture/**").permitAll()
+
+
                         .anyRequest().authenticated()
                 );
 
