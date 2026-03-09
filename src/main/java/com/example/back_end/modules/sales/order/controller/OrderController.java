@@ -14,8 +14,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
@@ -261,6 +264,66 @@ public class OrderController {
         }
 
         return ResponseEntity.ok(returnHistoryService.listReturnsForOrder(orderId));
+    }
+
+    /**
+     * Get order report with filtering, pagination, and sorting
+     * GET /api/orders/report
+     * Requires CEO or STORE_MANAGER role
+     */
+    @GetMapping("/report")
+    @PreAuthorize("hasAnyRole('CEO', 'STORE_MANAGER')")
+    public ResponseEntity<OrderDTO.OrderReportResponse> getOrderReport(
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(required = false) String cashierName,
+            @RequestParam(required = false) Long cashierId,
+            @RequestParam(required = false, defaultValue = "PAID") String status,
+            @RequestParam(required = false, defaultValue = "50") Integer limit,
+            @RequestParam(required = false, defaultValue = "0") Integer offset,
+            @RequestParam(required = false, defaultValue = "date") String orderBy,
+            @RequestParam(required = false, defaultValue = "DESC") String orderDirection
+    ) {
+        // Parse date parameters
+        LocalDate fromDate = null;
+        LocalDate toDate = null;
+        
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        
+        if (from != null && !from.trim().isEmpty()) {
+            try {
+                fromDate = LocalDate.parse(from, formatter);
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().build();
+            }
+        }
+        
+        if (to != null && !to.trim().isEmpty()) {
+            try {
+                toDate = LocalDate.parse(to, formatter);
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().build();
+            }
+        }
+
+        // Validate limit (max 200)
+        if (limit != null && limit > 200) {
+            limit = 200;
+        }
+
+        OrderDTO.OrderReportResponse response = orderService.getOrderReport(
+                fromDate,
+                toDate,
+                cashierName,
+                cashierId,
+                status,
+                limit,
+                offset,
+                orderBy,
+                orderDirection
+        );
+
+        return ResponseEntity.ok(response);
     }
 }
 

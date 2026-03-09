@@ -54,4 +54,8 @@ public interface StoreProductService {
 
     // Get wasted products (products that have waste movements)
     Page<StoreProductResponseDTO> getWastedProducts(String q, Pageable pageable);
+
+    // Get store product statistics
+    com.example.back_end.modules.store_product.dto.StoreProductStatsDTO getStoreProductStats(
+            String brand, Boolean isActive, BigDecimal minPrice, BigDecimal maxPrice, String sku);
 }

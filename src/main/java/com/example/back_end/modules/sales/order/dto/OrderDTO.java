@@ -206,4 +206,47 @@ public class OrderDTO {
         private LocalDateTime createdAt;
         private LocalDateTime paidAt;
     }
+
+    /**
+     * Order report item for the report endpoint
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class OrderReportItem {
+        private Long orderId;
+        private String orderNumber;
+        private String date; // YYYY-MM-DD
+        private String time; // HH:mm:ss
+        private Long sessionId;
+        private Long cashierId;
+        private String cashierName;
+        private String customerName;
+        private String customerPhone;
+        private String status;
+        private Integer itemCount;
+        private BigDecimal subtotal;
+        private BigDecimal discountAmount;
+        private BigDecimal taxAmount;
+        private BigDecimal grandTotal;
+        private String paymentMethod;
+        private LocalDateTime paidAt;
+        private LocalDateTime createdAt;
+        private String notes;
+    }
+
+    /**
+     * Order report response with pagination
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class OrderReportResponse {
+        private List<OrderReportItem> items;
+        private Long total;
+        private Integer limit;
+        private Integer offset;
+    }
 }

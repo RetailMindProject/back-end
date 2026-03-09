@@ -99,6 +99,9 @@ public class SecurityConfig {
                         // Other terminal endpoints (authenticated)
                         .requestMatchers("/api/terminal/**").authenticated()
 
+                        // Order report endpoint (requires CEO or STORE_MANAGER) - must be before /api/orders/**
+                        .requestMatchers("/api/orders/report").hasAnyRole("CEO", "STORE_MANAGER")
+
                         // Public endpoints
                         .requestMatchers("/api/orders/**").permitAll()
                         .requestMatchers("/api/returns/**").permitAll()
@@ -110,6 +113,7 @@ public class SecurityConfig {
                         // Role-based endpoints
                         .requestMatchers("/api/dashboard/store/**").hasAnyRole("STORE_MANAGER", "CEO")
                         .requestMatchers("/api/dashboard/inventory/**").hasAnyRole("INVENTORY_MANAGER", "CEO")
+                        .requestMatchers("/api/reports/**").hasAnyRole("STORE_MANAGER", "CEO")
                         .requestMatchers("/api/forecasting/**").permitAll()
                         .requestMatchers("/api/reco/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/picture/**").permitAll()

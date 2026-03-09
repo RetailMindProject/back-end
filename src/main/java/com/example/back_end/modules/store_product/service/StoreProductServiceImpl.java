@@ -773,6 +773,32 @@ public class StoreProductServiceImpl implements StoreProductService {
                 .map(StoreProductMapper::fromProjection);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public com.example.back_end.modules.store_product.dto.StoreProductStatsDTO getStoreProductStats(
+            String brand, Boolean isActive, BigDecimal minPrice, BigDecimal maxPrice, String sku) {
+        // Validate price range
+        if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
+            throw new IllegalArgumentException("Minimum price cannot be greater than maximum price");
+        }
+
+        // Count total products with store quantity > 0
+        long totalProducts = snapshotRepository.countTotalStoreProducts(brand, isActive, minPrice, maxPrice, sku);
+
+        // Count low stock products (threshold: 10)
+        BigDecimal lowStockThreshold = BigDecimal.valueOf(10);
+        long lowStock = snapshotRepository.countLowStoreStock(brand, isActive, minPrice, maxPrice, sku, lowStockThreshold);
+
+        // Count out of stock products (storeQuantity = 0)
+        long outOfStock = snapshotRepository.countOutOfStoreStock(brand, isActive, minPrice, maxPrice, sku);
+
+        return com.example.back_end.modules.store_product.dto.StoreProductStatsDTO.builder()
+                .totalProducts(totalProducts)
+                .lowStock(lowStock)
+                .outOfStock(outOfStock)
+                .build();
+    }
+
     // helpers
     private StockSnapshot getOrCreateSnapshot(Long productId) {
         return snapshotRepository.findById(productId)

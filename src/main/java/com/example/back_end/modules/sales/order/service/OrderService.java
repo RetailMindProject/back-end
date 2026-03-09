@@ -22,6 +22,7 @@ import com.example.back_end.modules.sales.order.entity.OrderItem;
 import com.example.back_end.modules.sales.order.mapper.OrderMapper;
 import com.example.back_end.modules.sales.order.repository.OrderItemRepository;
 import com.example.back_end.modules.sales.order.repository.OrderRepository;
+import com.example.back_end.modules.sales.order.repository.projection.OrderReportProjection;
 import com.example.back_end.modules.sales.payment.entity.Payment;
 import com.example.back_end.modules.sales.payment.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
@@ -34,7 +35,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -753,5 +756,198 @@ public class OrderService {
         List<OrderItem> items = orderItemRepository.findByOrderId(order.getId());
         List<Payment> payments = paymentRepository.findByOrderId(order.getId());
         return orderMapper.toOrderResponse(order, items, payments);
+    }
+
+    /**
+     * Get order report with filtering, pagination, and sorting
+     * 
+     * @param fromDate Start date filter (YYYY-MM-DD)
+     * @param toDate End date filter (YYYY-MM-DD)
+     * @param cashierName Cashier name filter (partial match, case-insensitive)
+     * @param cashierId Cashier ID filter
+     * @param status Order status filter (default: PAID)
+     * @param limit Page size (default: 50, max: 200)
+     * @param offset Pagination offset (default: 0)
+     * @param orderBy Sort field (date, total, cashier) - default: date
+     * @param orderDirection Sort direction (ASC, DESC) - default: DESC
+     * @return Paginated order report
+     */
+    @Transactional(readOnly = true)
+    public OrderDTO.OrderReportResponse getOrderReport(
+            LocalDate fromDate,
+            LocalDate toDate,
+            String cashierName,
+            Long cashierId,
+            String status,
+            Integer limit,
+            Integer offset,
+            String orderBy,
+            String orderDirection
+    ) {
+        // Validate and set defaults
+        if (status == null || status.trim().isEmpty()) {
+            status = "PAID";
+        } else {
+            status = status.trim().toUpperCase();
+            // Map HELD to HOLD (database uses HOLD)
+            if ("HELD".equals(status)) {
+                status = "HOLD";
+            }
+        }
+        
+        if (limit == null || limit <= 0) {
+            limit = 50;
+        }
+        if (limit > 200) {
+            limit = 200;
+        }
+        
+        if (offset == null || offset < 0) {
+            offset = 0;
+        }
+        
+        if (orderBy == null || orderBy.trim().isEmpty()) {
+            orderBy = "date";
+        }
+        if (!Arrays.asList("date", "total", "cashier").contains(orderBy.toLowerCase())) {
+            orderBy = "date";
+        }
+        
+        if (orderDirection == null || orderDirection.trim().isEmpty()) {
+            orderDirection = "DESC";
+        }
+        if (!Arrays.asList("ASC", "DESC").contains(orderDirection.toUpperCase())) {
+            orderDirection = "DESC";
+        }
+        
+        // Normalize cashier name (trim and null if empty)
+        if (cashierName != null && cashierName.trim().isEmpty()) {
+            cashierName = null;
+        }
+
+        // Get orders from repository
+        List<OrderReportProjection> projections = orderRepository.findOrderReport(
+                status,
+                fromDate,
+                toDate,
+                cashierName,
+                cashierId,
+                orderBy.toUpperCase(),
+                orderDirection.toUpperCase(),
+                limit,
+                offset
+        );
+
+        // Get total count
+        Long total = orderRepository.countOrderReport(
+                status,
+                fromDate,
+                toDate,
+                cashierName,
+                cashierId
+        );
+
+        // Transform projections to DTOs
+        List<OrderDTO.OrderReportItem> items = projections.stream()
+                .map(this::mapProjectionToReportItem)
+                .collect(Collectors.toList());
+
+        return OrderDTO.OrderReportResponse.builder()
+                .items(items)
+                .total(total)
+                .limit(limit)
+                .offset(offset)
+                .build();
+    }
+
+    /**
+     * Map OrderReportProjection to OrderReportItem DTO
+     */
+    private OrderDTO.OrderReportItem mapProjectionToReportItem(OrderReportProjection projection) {
+        // Format date and time
+        LocalDateTime dateTime = projection.getPaidAt() != null 
+                ? projection.getPaidAt() 
+                : projection.getCreatedAt();
+        
+        String date = dateTime != null 
+                ? dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+                : null;
+        
+        String time = dateTime != null 
+                ? dateTime.format(DateTimeFormatter.ofPattern("HH:mm:ss"))
+                : null;
+
+        // Combine cashier name
+        String cashierName = combineName(
+                projection.getCashierFirstName(),
+                projection.getCashierLastName()
+        );
+
+        // Combine customer name
+        String customerName = combineName(
+                projection.getCustomerFirstName(),
+                projection.getCustomerLastName()
+        );
+
+        // Determine payment method
+        String paymentMethod = determinePaymentMethod(
+                projection.getPaymentMethod(),
+                projection.getPaymentCount()
+        );
+
+        return OrderDTO.OrderReportItem.builder()
+                .orderId(projection.getOrderId())
+                .orderNumber(projection.getOrderNumber())
+                .date(date)
+                .time(time)
+                .sessionId(projection.getSessionId())
+                .cashierId(projection.getCashierId())
+                .cashierName(cashierName)
+                .customerName(customerName)
+                .customerPhone(projection.getCustomerPhone())
+                .status(projection.getStatus())
+                .itemCount(projection.getItemCount())
+                .subtotal(projection.getSubtotal())
+                .discountAmount(projection.getDiscountAmount())
+                .taxAmount(projection.getTaxAmount())
+                .grandTotal(projection.getGrandTotal())
+                .paymentMethod(paymentMethod)
+                .paidAt(projection.getPaidAt())
+                .createdAt(projection.getCreatedAt())
+                .notes(null) // Notes field not in projection, set to null
+                .build();
+    }
+
+    /**
+     * Combine first and last name
+     */
+    private String combineName(String firstName, String lastName) {
+        if (firstName == null && lastName == null) {
+            return null;
+        }
+        if (firstName == null) {
+            return lastName;
+        }
+        if (lastName == null) {
+            return firstName;
+        }
+        return firstName + " " + lastName;
+    }
+
+    /**
+     * Determine payment method based on payment count and method
+     */
+    private String determinePaymentMethod(String paymentMethodFromQuery, Integer paymentCount) {
+        if (paymentCount == null || paymentCount == 0) {
+            return "UNKNOWN";
+        }
+        if (paymentCount > 1) {
+            return "SPLIT";
+        }
+        // Single payment - use the method from query (CASH or CARD)
+        if (paymentMethodFromQuery != null) {
+            return paymentMethodFromQuery;
+        }
+        return "UNKNOWN";
     }
 }

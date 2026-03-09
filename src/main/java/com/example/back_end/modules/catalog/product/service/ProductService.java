@@ -7,6 +7,7 @@ import com.example.back_end.modules.catalog.product.dto.AddProductMediaDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductCreateDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductResponseDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductSimpleDTO;
+import com.example.back_end.modules.catalog.product.dto.ProductStatsDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductUpdateDTO;
 import com.example.back_end.modules.catalog.product.dto.UpdateProductMediaDTO;
 
@@ -18,10 +19,15 @@ public interface ProductService {
     // CRUD Operations
     ProductResponseDTO create(ProductCreateDTO dto);
     ProductResponseDTO getById(Long id);
+    ProductResponseDTO getById(Long id, boolean includeStock, boolean includeCategories);
     Page<ProductResponseDTO> search(String q, Pageable pageable);
     Page<ProductResponseDTO> filter(String brand, Boolean isActive,
                                     BigDecimal minPrice, BigDecimal maxPrice,
-                                    String sku, Pageable pageable);
+                                    String sku, Integer minWarehouseQuantity,
+                                    Integer minStoreQuantity, String search,
+                                    Boolean lowStock, Boolean outOfStock,
+                                    Pageable pageable,
+                                    boolean includeStock, boolean includeCategories);
     ProductResponseDTO update(Long id, ProductUpdateDTO dto);
     void delete(Long id);
     ProductResponseDTO addImage(Long productId, AddProductMediaDTO dto);
@@ -35,5 +41,6 @@ public interface ProductService {
     List<ProductResponseDTO> getProductsByCategory(Long categoryId);
     Page<ProductResponseDTO> getProductsByCategoryPaginated(Long categoryId, Pageable pageable);
     List<ProductSimpleDTO> quickSearch(String searchTerm);
+    ProductStatsDTO getProductStats(String brand, Boolean isActive, BigDecimal minPrice, BigDecimal maxPrice, String sku);
 }
 
