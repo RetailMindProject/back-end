@@ -13,5 +13,9 @@ public class RecommendationItemDTO {
     private OfferInfoDTO offer;
     private Double baseScore;
     private Double offerBoost;
+
+    // Image support
+    private String imageUrl;
+    private String imageAlt;
 }
 

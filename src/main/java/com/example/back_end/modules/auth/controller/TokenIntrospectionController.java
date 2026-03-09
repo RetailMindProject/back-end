@@ -4,6 +4,7 @@ import com.example.back_end.modules.auth.dto.TokenIntrospectionResponseDTO;
 import com.example.back_end.security.JwtService;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -80,10 +81,11 @@ public class TokenIntrospectionController {
                     .build());
 
         } catch (Exception e) {
-            // Token is invalid or malformed
-            return ResponseEntity.ok(TokenIntrospectionResponseDTO.builder()
-                    .valid(false)
-                    .build());
+            // Token is invalid or malformed - return 401 Unauthorized
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(TokenIntrospectionResponseDTO.builder()
+                            .valid(false)
+                            .build());
         }
     }
 }

@@ -34,6 +34,9 @@ class ReturnHistoryServiceTest {
     @Mock
     com.example.back_end.modules.sales.payment.repository.PaymentRepository paymentRepository;
 
+    @Mock
+    com.example.back_end.modules.register.repository.CustomerRepository customerRepository;
+
     @InjectMocks
     ReturnHistoryService returnHistoryService;
 
@@ -43,7 +46,7 @@ class ReturnHistoryServiceTest {
             @Override public Long getOrderId() { return 10L; }
             @Override public String getOrderNumber() { return "ORD-10"; }
             @Override public LocalDateTime getOrderDate() { return LocalDateTime.now().minusDays(1); }
-            @Override public String getCustomerName() { return null; }
+            @Override public String getCustomerName() { return "Ahmad Saleh"; }
             @Override public BigDecimal getTotalPaid() { return new BigDecimal("100.00"); }
             @Override public Long getReturnCount() { return 2L; }
             @Override public BigDecimal getTotalReturned() { return new BigDecimal("30.00"); }
@@ -61,6 +64,7 @@ class ReturnHistoryServiceTest {
         assertThat(result.getItems()).hasSize(1);
         assertThat(result.getItems().get(0).getOrderId()).isEqualTo(10L);
         assertThat(result.getItems().get(0).getOrderNumber()).isEqualTo("ORD-10");
+        assertThat(result.getItems().get(0).getCustomerName()).isEqualTo("Ahmad Saleh");
         assertThat(result.getItems().get(0).getReturnCount()).isEqualTo(2L);
         assertThat(result.getItems().get(0).getTotalReturned()).isEqualByComparingTo("30.00");
     }

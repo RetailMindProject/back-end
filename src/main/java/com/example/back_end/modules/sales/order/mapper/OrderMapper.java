@@ -23,10 +23,30 @@ public class OrderMapper {
         // Calculate original line total (before discount)
         BigDecimal originalLineTotal = item.getUnitPrice()
                 .multiply(item.getQuantity());
-        
+
+        OrderDTO.ProductMini productMini = null;
+        if (item.getProduct() != null) {
+            OrderDTO.ImageMini imageMini = item.getProduct().getProductMedia().stream()
+                    .filter(pm -> pm.getMedia() != null)
+                    .filter(pm -> Boolean.TRUE.equals(pm.getIsPrimary()))
+                    .findFirst()
+                    .map(pm -> OrderDTO.ImageMini.builder()
+                            .url(toFrontendPath(pm.getMedia().getUrl()))
+                            .altText(pm.getMedia().getAltText())
+                            .build())
+                    .orElse(null);
+
+            productMini = OrderDTO.ProductMini.builder()
+                    .id(item.getProduct().getId())
+                    .name(item.getProduct().getName())
+                    .image(imageMini)
+                    .build();
+        }
+
         return OrderDTO.OrderItemResponse.builder()
                 .id(item.getId())
                 .productId(item.getProduct() != null ? item.getProduct().getId() : null)
+                .product(productMini)
                 .unitPrice(item.getUnitPrice())
                 .quantity(item.getQuantity())
                 .discountAmount(item.getDiscountAmount())
@@ -34,6 +54,21 @@ public class OrderMapper {
                 .offerId(item.getOfferId())
                 .originalLineTotal(originalLineTotal)
                 .build();
+    }
+
+    private static String toFrontendPath(String url) {
+        if (url == null || url.isBlank()) return url;
+        if (url.startsWith("/")) return url;
+
+        int idx = url.indexOf("//");
+        if (idx >= 0) {
+            int firstSlashAfterHost = url.indexOf('/', idx + 2);
+            if (firstSlashAfterHost >= 0) {
+                return url.substring(firstSlashAfterHost);
+            }
+        }
+
+        return "/" + url;
     }
 
     /**

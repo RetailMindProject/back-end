@@ -4,7 +4,6 @@ import com.example.back_end.exception.CustomException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -44,9 +43,10 @@ public class ImageStorageService {
         validate(file);
         Path productDir = getProductDirectory(productId);
         
-        String original = StringUtils.cleanPath(file.getOriginalFilename());
-        String ext = getExtension(original);
-        String name = UUID.randomUUID() + ext;
+        // إنشاء اسم ملف فريد باستخدام امتداد آمن بناءً على نوع MIME المعتمد
+        // لا نستخدم اسم الملف الأصلي لتجنب ثغرات Path Traversal
+        String safeExtension = getSafeExtensionFromMimeType(file.getContentType());
+        String name = UUID.randomUUID() + safeExtension;
         Path target = productDir.resolve(name);
         
         try {
@@ -103,10 +103,22 @@ public class ImageStorageService {
         }
     }
 
-    private String getExtension(String name) {
-        if (name == null) return "";
-        int idx = name.lastIndexOf('.');
-        return idx == -1 ? "" : name.substring(idx);
+    /**
+     * Get safe file extension based on validated MIME type.
+     * This prevents path traversal attacks by not using user-provided filenames.
+     */
+    private String getSafeExtensionFromMimeType(String mimeType) {
+        if (mimeType == null) {
+            return ".jpg"; // Default to jpg for images
+        }
+
+        return switch (mimeType) {
+            case "image/jpeg" -> ".jpg";
+            case "image/png" -> ".png";
+            case "image/gif" -> ".gif";
+            case "image/webp" -> ".webp";
+            default -> ".jpg";
+        };
     }
 }
 

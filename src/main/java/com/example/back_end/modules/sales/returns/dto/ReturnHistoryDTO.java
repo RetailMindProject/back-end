@@ -80,10 +80,10 @@ public class ReturnHistoryDTO {
         private Long returnOrderId;
         private Long originalOrderId;
         private Long customerId;
+        private String customerName;
         private BigDecimal totalRefund;
         private List<ReturnDTO.ReturnedItemResponse> items;
         private List<ReturnDTO.RefundResponse> refunds;
         private LocalDateTime createdAt;
     }
 }
-

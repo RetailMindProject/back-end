@@ -53,6 +53,12 @@ public class User {
     @Column(nullable = false, length = 255)
     private String password;
 
+    @Column(name = "email_verified", nullable = false)
+    private Boolean emailVerified = false;
+
+    @Column(name = "email_verified_at")
+    private LocalDateTime emailVerifiedAt;
+
     public enum UserRole {
         CEO,
         STORE_MANAGER,

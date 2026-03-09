@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 import java.util.Map;
 
@@ -26,21 +27,13 @@ public class PairingRequestController {
 
     /**
      * Flow 2: Cashier creates pairing request
+     * Browser-token only (NO JWT).
      */
     @PostMapping
     public ResponseEntity<?> createRequest(
             @Valid @RequestBody PairingRequestDTO.CreateRequest request,
             HttpServletRequest httpRequest) {
         try {
-            // Get user from JWT
-            String token = extractToken(httpRequest);
-            if (token == null) {
-                return ResponseEntity.status(401)
-                        .body(Map.of("error", "No token provided"));
-            }
-
-            Long userId = jwtService.extractUserId(token);
-
             // Get browser token
             BrowserContext context = BrowserTokenFilter.getContext(httpRequest);
             if (context == null) {
@@ -48,8 +41,9 @@ public class PairingRequestController {
                         .body(Map.of("error", "Browser context not available"));
             }
 
+            // Cashier is not authenticated here => requestedBy is NULL
             PairingRequestDTO.Response response = pairingRequestService
-                    .createPairingRequest(request, userId, context.getBrowserTokenHash());
+                    .createPairingRequest(request, null, context.getBrowserTokenHash());
 
             return ResponseEntity.ok(response);
 

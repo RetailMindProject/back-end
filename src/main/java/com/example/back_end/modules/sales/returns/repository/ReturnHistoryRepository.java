@@ -34,7 +34,10 @@ public interface ReturnHistoryRepository extends Repository<com.example.back_end
               o.id           AS orderId,
               o.order_number AS orderNumber,
               o.created_at   AS orderDate,
-              NULL           AS customerName,
+              CASE
+                WHEN c.id IS NULL THEN NULL
+                ELSE TRIM(CONCAT(COALESCE(c.first_name, ''), ' ', COALESCE(c.last_name, '')))
+              END AS customerName,
               o.grand_total  AS totalPaid,
               COUNT(ro.id)   AS returnCount,
               COALESCE(SUM(ro.grand_total), 0) AS totalReturned,
@@ -43,13 +46,15 @@ public interface ReturnHistoryRepository extends Repository<com.example.back_end
             JOIN orders ro
               ON ro.parent_order_id = o.id
              AND ro.status = 'RETURNED'
+            LEFT JOIN customers c
+              ON c.id = o.customer_id
             WHERE o.created_at >= COALESCE(CAST(:from AS timestamp), '-infinity'::timestamp)
               AND o.created_at <= COALESCE(CAST(:to   AS timestamp),  'infinity'::timestamp)
               AND (
                     NULLIF(COALESCE(CAST(:q AS text), ''), '') IS NULL
                     OR LOWER(o.order_number) LIKE CONCAT('%', LOWER(CAST(:q AS text)), '%')
                   )
-            GROUP BY o.id, o.order_number, o.created_at, o.grand_total
+            GROUP BY o.id, o.order_number, o.created_at, o.grand_total, c.id, c.first_name, c.last_name
             ORDER BY MAX(ro.created_at) DESC
             """,
             countQuery = """
@@ -60,6 +65,8 @@ public interface ReturnHistoryRepository extends Repository<com.example.back_end
               JOIN orders ro
                 ON ro.parent_order_id = o.id
                AND ro.status = 'RETURNED'
+              LEFT JOIN customers c
+                ON c.id = o.customer_id
               WHERE o.created_at >= COALESCE(CAST(:from AS timestamp), '-infinity'::timestamp)
                 AND o.created_at <= COALESCE(CAST(:to   AS timestamp),  'infinity'::timestamp)
                 AND (

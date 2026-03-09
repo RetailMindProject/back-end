@@ -1,5 +1,6 @@
 package com.example.back_end.modules.login.service;
 
+import com.example.back_end.modules.auth.repository.PendingRegistrationRepository;
 import com.example.back_end.modules.login.dto.LoginRequestDTO;
 import com.example.back_end.modules.login.dto.LoginResponseDTO;
 import com.example.back_end.modules.login.entity.uesr;
@@ -17,13 +18,22 @@ public class LoginService {
 
     private final repository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JwtService jwtService;  // ✅ أضف هذا
+    private final JwtService jwtService;
+    private final PendingRegistrationRepository pendingRegistrationRepository;
 
     public LoginResponseDTO login(LoginRequestDTO loginRequest) {
         try {
             // البحث عن المستخدم بالإيميل والتأكد من أنه نشط
             uesr user = userRepository.findByEmailAndIsActiveTrue(loginRequest.getEmail())
-                    .orElseThrow(() -> new RuntimeException("Invalid email or password"));
+                    .orElseThrow(() -> {
+                        // Check if email exists in pending registrations
+                        boolean hasPendingRegistration = pendingRegistrationRepository.existsByEmail(loginRequest.getEmail());
+                        if (hasPendingRegistration) {
+                            log.warn("Login attempt for unverified account: {}", loginRequest.getEmail());
+                            return new RuntimeException("Please verify your email address before logging in. Check your inbox for the verification link.");
+                        }
+                        return new RuntimeException("Invalid email or password");
+                    });
 
             // التحقق من كلمة المرور
             if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {

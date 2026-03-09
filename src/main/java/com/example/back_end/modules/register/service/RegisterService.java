@@ -1,6 +1,7 @@
 package com.example.back_end.modules.register.service;
 
 import com.example.back_end.exception.CustomException;
+import com.example.back_end.modules.auth.service.PendingRegistrationService;
 import com.example.back_end.modules.register.dto.RegisterRequestDTO;
 import com.example.back_end.modules.register.dto.RegisterResponseDTO;
 import com.example.back_end.modules.register.entity.Customer;
@@ -30,6 +31,7 @@ public class RegisterService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final UserMapper userMapper;
+    private final PendingRegistrationService pendingRegistrationService;
 
     @Transactional
     public RegisterResponseDTO register(RegisterRequestDTO request) {
@@ -54,12 +56,25 @@ public class RegisterService {
         // Get current authenticated user
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-        // Self registration (first CEO or CUSTOMER)
-        if (request.getIsSelfRegistration() != null && request.getIsSelfRegistration()) {
-            if (!request.getRole().equals(UserRole.CEO) && !request.getRole().equals(UserRole.CUSTOMER)) {
-                throw new CustomException("Self registration is only allowed for CEO or CUSTOMER roles");
-            }
+        // Self registration for CUSTOMER - use pending registration flow
+        if (request.getIsSelfRegistration() != null &&
+            request.getIsSelfRegistration() &&
+            UserRole.CUSTOMER.equals(request.getRole())) {
+
+            // NEW CUSTOMERS must verify email before account creation
+            return pendingRegistrationService.startCustomerRegistration(request);
+        }
+
+        // Self registration for CEO (first user) - create immediately
+        if (request.getIsSelfRegistration() != null &&
+            request.getIsSelfRegistration() &&
+            UserRole.CEO.equals(request.getRole())) {
             return createUserAndCustomerIfNeeded(request);
+        }
+
+        // Self registration validation (only CEO or CUSTOMER allowed)
+        if (request.getIsSelfRegistration() != null && request.getIsSelfRegistration()) {
+            throw new CustomException("Self registration is only allowed for CEO or CUSTOMER roles");
         }
 
         // If no authenticated user

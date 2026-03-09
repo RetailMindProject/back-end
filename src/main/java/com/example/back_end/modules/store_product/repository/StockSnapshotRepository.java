@@ -7,8 +7,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
+import jakarta.persistence.LockModeType;
+
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 public interface StockSnapshotRepository extends JpaRepository<StockSnapshot, Long> {
 
@@ -169,6 +172,7 @@ public interface StockSnapshotRepository extends JpaRepository<StockSnapshot, Lo
                    OR p.sku  ILIKE CONCAT('%', CAST(:q AS TEXT), '%'))
             """,
             nativeQuery = true)
+  
             Page<StockProjection> findWastedProducts(@Param("q") String q, Pageable pageable);
 
     /**
@@ -229,4 +233,9 @@ public interface StockSnapshotRepository extends JpaRepository<StockSnapshot, Lo
                              @Param("minPrice") BigDecimal minPrice,
                              @Param("maxPrice") BigDecimal maxPrice,
                              @Param("sku") String sku);
+    Page<StockProjection> findWastedProducts(@Param("q") String q, Pageable pageable);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM StockSnapshot s WHERE s.productId = :productId")
+    Optional<StockSnapshot> findByProductIdForUpdate(@Param("productId") Long productId);
 }

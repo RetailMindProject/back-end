@@ -4,6 +4,7 @@ import com.example.back_end.modules.catalog.category.dto.CategoryDTO;
 import com.example.back_end.modules.catalog.category.entity.Category;
 import com.example.back_end.modules.catalog.product.dto.ProductCreateDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductImageDTO;
+import com.example.back_end.modules.catalog.product.dto.ProductImageMiniDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductResponseDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductSimpleDTO;
 import com.example.back_end.modules.catalog.product.dto.ProductUpdateDTO;
@@ -55,13 +56,18 @@ public final class ProductMapper {
     public static ProductResponseDTO toResponse(Product entity) {
         if (entity == null) return null;
 
-        // Get primary image URL
-        String primaryImageUrl = entity.getProductMedia().stream()
+        ProductImageMiniDTO primaryImageMini = entity.getProductMedia().stream()
                 .filter(pm -> pm.getMedia() != null)
                 .filter(ProductMedia::getIsPrimary)
                 .findFirst()
-                .map(pm -> pm.getMedia().getUrl())
+                .map(pm -> ProductImageMiniDTO.builder()
+                        .url(toFrontendPath(pm.getMedia().getUrl()))
+                        .altText(pm.getMedia().getAltText())
+                        .build())
                 .orElse(null);
+
+        // Keep the old field for backward compatibility (but normalized as path as well)
+        String primaryImageUrl = primaryImageMini == null ? null : primaryImageMini.getUrl();
 
         // Map all images
         List<ProductImageDTO> images = entity.getProductMedia().stream()
@@ -96,6 +102,7 @@ public final class ProductMapper {
                 .isActive(entity.getIsActive())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
+                .image(primaryImageMini)
                 .primaryImageUrl(primaryImageUrl)
                 .images(images)
                 .storeQty(null)
@@ -137,7 +144,7 @@ public final class ProductMapper {
 
         return ProductImageDTO.builder()
                 .mediaId(productMedia.getMedia().getId())
-                .url(productMedia.getMedia().getUrl())
+                .url(toFrontendPath(productMedia.getMedia().getUrl()))
                 .mimeType(productMedia.getMedia().getMimeType())
                 .title(productMedia.getMedia().getTitle())
                 .altText(productMedia.getMedia().getAltText())
@@ -146,15 +153,49 @@ public final class ProductMapper {
                 .build();
     }
 
+    private static String toFrontendPath(String url) {
+        if (url == null || url.isBlank()) return url;
+
+        // If already a path like /picture/Tea.jpg
+        if (url.startsWith("/")) return url;
+
+        // If full URL, keep only the path part.
+        // Examples:
+        // - http://host/picture/Tea.jpg -> /picture/Tea.jpg
+        // - https://host:8080/uploads/picture/Tea.jpg -> /uploads/picture/Tea.jpg
+        int idx = url.indexOf("//");
+        if (idx >= 0) {
+            int firstSlashAfterHost = url.indexOf('/', idx + 2);
+            if (firstSlashAfterHost >= 0) {
+                return url.substring(firstSlashAfterHost);
+            }
+        }
+
+        // Otherwise treat it as relative path without leading slash
+        return "/" + url;
+    }
+
     /**
      * Convert to ProductSimpleDTO (lightweight for POS cart)
      */
     public static ProductSimpleDTO toSimpleDTO(Product entity) {
         if (entity == null) return null;
+
+        ProductImageMiniDTO primaryImageMini = entity.getProductMedia().stream()
+                .filter(pm -> pm.getMedia() != null)
+                .filter(ProductMedia::getIsPrimary)
+                .findFirst()
+                .map(pm -> ProductImageMiniDTO.builder()
+                        .url(toFrontendPath(pm.getMedia().getUrl()))
+                        .altText(pm.getMedia().getAltText())
+                        .build())
+                .orElse(null);
+
         return ProductSimpleDTO.builder()
                 .id(entity.getId())
                 .sku(entity.getSku())
                 .name(entity.getName())
+                .image(primaryImageMini)
                 .defaultPrice(entity.getDefaultPrice())
                 .taxRate(entity.getTaxRate())
                 .unit(entity.getUnit())

@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -283,7 +284,7 @@ public class TerminalPairingService {
                     Session newSession = Session.builder()
                             .terminalId(terminalId)
                             .openedAt(LocalDateTime.now())
-                            .openingFloat(new java.math.BigDecimal(DEFAULT_OPENING_FLOAT))
+                            .openingFloat(BigDecimal.valueOf(DEFAULT_OPENING_FLOAT))
                             .status("OPEN")
                             .build();
 
